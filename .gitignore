@@ -1,0 +1,8 @@
+.env*
+*~
+OLD*
+.nyc*
+node_modules
+out-*
+_*
+coverage
