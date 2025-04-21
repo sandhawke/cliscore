@@ -49,7 +49,7 @@ export async function executeCommand(command, options = {}) {
     tempScriptPath = join(cwd, `temp-cmd-${Date.now()}.sh`)
     // Source the script file if exists, then run the command
     const scriptContent = scriptFile ?
-      `#!/bin/bash\nsource "${scriptFile}" 2>/dev/null || true\n${command}\n` :
+      `#!/bin/bash\nsource "${scriptFile}" 2>/dev/null >/dev/null || true\n${command}\n` :
       `#!/bin/bash\n${command}\n`
     await writeFile(tempScriptPath, scriptContent, { mode: 0o755 })
     debug(`Created temporary script at ${tempScriptPath}`)
@@ -75,11 +75,13 @@ export async function executeCommand(command, options = {}) {
       })
     } else {
       // For regular commands, source the script file if exists for environment setup
-      // Don't redirect output when sourcing to ensure variable preservation
+      // IMPORTANT: Redirect output when sourcing to /dev/null to prevent accumulation
+      // but use a special technique to preserve variable values
       let fullCommand = command
       if (scriptFile) {
-        // The fix: removed stdout/stderr redirection that was preventing proper variable handling
-        fullCommand = `source "${scriptFile}" || true && ${command}`
+        // The fix: We need to redirect stdout/stderr to /dev/null when sourcing
+        // but still allow environment variables to be preserved
+        fullCommand = `{ source "${scriptFile}" || true; } > /dev/null 2>&1 && ${command}`
       }
       childProcess = spawn(shell, ['-c', fullCommand], {
         cwd,
@@ -161,9 +163,9 @@ async function appendToScriptFile(scriptFile, command) {
   // Don't include exit status checks in the script file to avoid side effects
   const cleanCommand = command.replace(/\bexit\s+\d+\b/, '# $&')
 
-  // Don't redirect output in the script file to preserve variable content
-  // This is crucial for multiline variables and commands that set variables
-  await writeFile(scriptFile, `${cleanCommand}\n`, { flag: 'a' })
+  // Write commands in a way that preserves state but doesn't produce output when sourced
+  // The curly braces with redirects ensure any output is suppressed but variables persist
+  await writeFile(scriptFile, `{ ${cleanCommand}; } > /dev/null 2>&1\n`, { flag: 'a' })
   debug(`Appended command to script file: ${scriptFile}`)
 }
 
