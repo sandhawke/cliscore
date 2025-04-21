@@ -18,7 +18,12 @@ This is a test file:
     commands: [
       {
         command: 'echo hello',
-        expectedOutput: ['hello']
+        expectedOutput: ['hello'],
+        lineInfo: {
+          file: 'unknown-file',
+          commandLine: 4,
+          outputStartLine: 5
+        }
       }
     ]
   }
@@ -41,11 +46,21 @@ Multiple commands:
     commands: [
       {
         command: 'echo first',
-        expectedOutput: ['first']
+        expectedOutput: ['first'],
+        lineInfo: {
+          file: 'unknown-file',
+          commandLine: 4,
+          outputStartLine: 5
+        }
       },
       {
         command: 'echo second',
-        expectedOutput: ['second']
+        expectedOutput: ['second'],
+        lineInfo: {
+          file: 'unknown-file',
+          commandLine: 6,
+          outputStartLine: 7
+        }
       }
     ]
   }
@@ -68,7 +83,12 @@ Multiline command:
     commands: [
       {
         command: 'echo first && \\\necho second',
-        expectedOutput: ['first', 'second']
+        expectedOutput: ['first', 'second'],
+        lineInfo: {
+          file: 'unknown-file',
+          commandLine: 4,
+          outputStartLine: 6
+        }
       }
     ]
   }
@@ -89,7 +109,12 @@ Custom indent:
     commands: [
       {
         command: 'echo hello',
-        expectedOutput: ['hello']
+        expectedOutput: ['hello'],
+        lineInfo: {
+          file: 'unknown-file',
+          commandLine: 4,
+          outputStartLine: 5
+        }
       }
     ]
   }

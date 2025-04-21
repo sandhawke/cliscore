@@ -74,11 +74,12 @@ export async function executeCommand(command, options = {}) {
         stdio: ['ignore', 'pipe', 'pipe'],
       })
     } else {
-      // For regular commands, source the script file if exists for environment setup only
-      // The key fix is to redirect all output from sourcing to /dev/null
+      // For regular commands, source the script file if exists for environment setup
+      // Don't redirect output when sourcing to ensure variable preservation
       let fullCommand = command
       if (scriptFile) {
-        fullCommand = `source "${scriptFile}" 2>/dev/null >/dev/null || true && ${command}`
+        // The fix: removed stdout/stderr redirection that was preventing proper variable handling
+        fullCommand = `source "${scriptFile}" || true && ${command}`
       }
       childProcess = spawn(shell, ['-c', fullCommand], {
         cwd,
@@ -143,7 +144,6 @@ export async function executeCommand(command, options = {}) {
   }
 
   // After execution, append the command to the script file for state persistence
-  // Only add commands that set environment variables or do other stateful operations
   if (scriptFile) {
     await appendToScriptFile(scriptFile, command)
   }
@@ -161,10 +161,9 @@ async function appendToScriptFile(scriptFile, command) {
   // Don't include exit status checks in the script file to avoid side effects
   const cleanCommand = command.replace(/\bexit\s+\d+\b/, '# $&')
 
-  // Redirect all output from the command to /dev/null when sourced in the future
-  const commandWithRedirects = `{ ${cleanCommand}; } >/dev/null 2>&1`
-
-  await writeFile(scriptFile, `${commandWithRedirects}\n`, { flag: 'a' })
+  // Don't redirect output in the script file to preserve variable content
+  // This is crucial for multiline variables and commands that set variables
+  await writeFile(scriptFile, `${cleanCommand}\n`, { flag: 'a' })
   debug(`Appended command to script file: ${scriptFile}`)
 }
 
