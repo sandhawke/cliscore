@@ -5,7 +5,7 @@
 
 import dbg from 'debug'
 import { parseTestFile } from './src/parser.js'
-import { executeCommand } from './src/executor.js'
+import { executeCommand, createTempExecutionDir } from './src/executor.js'
 import { matchOutput } from './src/matcher.js'
 import { formatTAP } from './src/formatter.js'
 
@@ -15,31 +15,33 @@ const debug = dbg('cliscore')
  * Run a test file and return the results
  * @param {object} options - Test options
  * @param {string} options.content - Content of the test file
- * @param {string} options.executionDir - Directory to execute commands in (default: process.cwd())
+ * @param {string} options.executionDir - Directory to execute commands in (default: temporary directory)
  * @param {object} options.env - Environment variables for commands (default: {})
  * @param {function} options.onOutput - Callback for command output (default: null)
- * @param {string} options.shell - Shell to use for commands (default: /bin/sh)
+ * @param {string} options.shell - Shell to use for commands (default: /bin/bash)
  * @param {number} options.timeout - Command timeout in ms (default: 30000)
  * @returns {Promise<object>} Test results
  */
 export async function runTest(options) {
   const {
     content,
-    executionDir = process.cwd(),
+    executionDir,
     env = {},
     onOutput = null,
-    shell = '/bin/sh',
+    shell = '/bin/bash',
     timeout = 30000
   } = options
 
-  debug(`Running test in directory: ${executionDir}`)
+  // Create a temporary directory if none is provided
+  const tempDir = executionDir || await createTempExecutionDir()
+  debug(`Running test in directory: ${tempDir}`)
 
   // Parse test file
   const test = parseTestFile(content)
 
   // Set up execution environment
   const execOptions = {
-    cwd: executionDir,
+    cwd: tempDir,
     env: { ...process.env, ...env },
     shell,
     timeout

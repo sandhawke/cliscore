@@ -6,6 +6,7 @@ import fs from 'fs'
 import path from 'path'
 import dbg from 'debug'
 import { runTest, formatAsOutput } from '../index.js'
+import { createTempExecutionDir } from './executor.js'
 
 const debug = dbg('cliscore:cli')
 
@@ -23,6 +24,7 @@ export async function cli(args) {
   }
 
   let allPassed = true
+  let tempDirs = []
 
   for (const file of args) {
     if (!file.endsWith('.t')) {
@@ -35,9 +37,18 @@ export async function cli(args) {
       debug(`Reading file: ${file}`)
       const content = fs.readFileSync(file, 'utf8')
 
+      // Create a clean temporary directory for this test
+      const testDir = await createTempExecutionDir()
+      tempDirs.push(testDir)
+
       const result = await runTest({
         content,
-        executionDir: path.dirname(path.resolve(file)),
+        executionDir: testDir,
+        env: {
+          // Pass the original source directory for reference
+          TESTDIR: path.dirname(path.resolve(file)),
+          TESTFILE: path.basename(file)
+        },
         onOutput: (command, stdout, stderr) => {
           debug(`Command: ${command}`)
           debug(`stdout: ${stdout}`)
@@ -56,6 +67,11 @@ export async function cli(args) {
       allPassed = false
     }
   }
+
+  // Cleanup could be added here if desired
+  // for (const dir of tempDirs) {
+  //   fs.rmSync(dir, { recursive: true, force: true });
+  // }
 
   return allPassed ? 0 : 1
 }

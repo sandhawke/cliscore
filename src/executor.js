@@ -5,6 +5,10 @@
 
 import { spawn } from 'child_process'
 import dbg from 'debug'
+import { mkdtemp } from 'fs/promises'
+import { join } from 'path'
+import { tmpdir } from 'os'
+import { existsSync, mkdirSync } from 'fs'
 
 const debug = dbg('cliscore:executor')
 
@@ -14,23 +18,40 @@ const debug = dbg('cliscore:executor')
  * @param {object} options - Execution options
  * @param {string} options.cwd - Working directory for command (default: process.cwd())
  * @param {object} options.env - Environment variables (default: process.env)
- * @param {string} options.shell - Shell to use (default: /bin/sh)
+ * @param {string} options.shell - Shell to use (default: /bin/bash)
  * @param {number} options.timeout - Timeout in milliseconds (default: 30000)
  * @returns {Promise<object>} Object with stdout, stderr, and exitCode
  */
 export async function executeCommand(command, options = {}) {
   const cwd = options.cwd || process.cwd()
   const env = options.env || process.env
-  const shell = options.shell || '/bin/sh'
+  const shell = options.shell || '/bin/bash'
   const timeout = options.timeout || 30000 // Default timeout: 30s
 
   debug(`Executing command: ${command}`)
   debug(`Working directory: ${cwd}`)
+  debug(`Using shell: ${shell}`)
+
+  // Ensure the working directory exists
+  if (!existsSync(cwd)) {
+    debug(`Creating directory: ${cwd}`)
+    mkdirSync(cwd, { recursive: true })
+  }
+
+  // Prepare environment with test-specific variables
+  const testEnv = {
+    ...env,
+    SHELL: shell,
+    // Add other useful environment variables for tests
+    CRAMTMP: cwd,
+    // Set BASH_ENV to ensure non-interactive features are available
+    BASH_ENV: ''
+  }
 
   return new Promise((resolve, reject) => {
     const child = spawn(shell, ['-c', command], {
       cwd,
-      env,
+      env: testEnv,
       stdio: ['ignore', 'pipe', 'pipe']
     })
 
@@ -79,4 +100,14 @@ export async function executeCommand(command, options = {}) {
       reject(err)
     })
   })
+}
+
+/**
+ * Create a temporary execution directory
+ * @returns {Promise<string>} Path to the temporary directory
+ */
+export async function createTempExecutionDir() {
+  const tmpDir = await mkdtemp(join(tmpdir(), 'cliscore-'))
+  debug(`Created temporary execution directory: ${tmpDir}`)
+  return tmpDir
 }

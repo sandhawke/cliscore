@@ -99,18 +99,56 @@ export function matchOutput(options) {
       }
     } else if (expectedLine.endsWith(' (glob)')) {
       const pattern = expectedLine.substring(0, expectedLine.length - 7)
-      const globPattern = pattern
-        .replace(/\./g, '\\.')
-        .replace(/\?/g, '.')
-        .replace(/\*/g, '.*')
+
+      // Convert glob pattern to regex, properly handling escaped characters
+      const globToRegex = (glob) => {
+        let regex = '';
+        let i = 0;
+
+        while (i < glob.length) {
+          const char = glob[i];
+
+          if (char === '\\' && i + 1 < glob.length) {
+            // Handle escaped characters - they should match literally
+            const nextChar = glob[i + 1];
+            if (nextChar === '*' || nextChar === '?' || nextChar === '\\') {
+              regex += escapeRegExp(nextChar);
+              i += 2;
+              continue;
+            }
+          }
+
+          if (char === '*') {
+            regex += '.*';
+          } else if (char === '?') {
+            regex += '.';
+          } else {
+            regex += escapeRegExp(char);
+          }
+
+          i++;
+        }
+
+        return regex;
+      };
+
+      // Escape special regex characters for literal matching
+      const escapeRegExp = (str) => {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      };
+
       try {
-        const regex = new RegExp(`^${globPattern}$`)
+        const regexPattern = globToRegex(pattern);
+        const regex = new RegExp(`^${regexPattern}$`);
+
+        debug(`Converting glob '${pattern}' to regex: ${regex}`);
+
         if (regex.test(actualLine)) {
-          results.details.push({ line: i, matched: true, type: 'glob' })
-          continue
+          results.details.push({ line: i, matched: true, type: 'glob' });
+          continue;
         }
       } catch (e) {
-        debug(`Invalid glob pattern: ${pattern}`)
+        debug(`Invalid glob pattern: ${pattern}`, e);
       }
     } else if (expectedLine.endsWith(' (no-eol)')) {
       const expectedContent = expectedLine.substring(0, expectedLine.length - 9)
