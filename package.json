@@ -1,0 +1,28 @@
+{
+  "type": "module",
+  "name": "cliscore",
+  "version": "0.0.0",
+  "description": "Testing framework for anything with a CLI",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sandhawke/cliscore.git"
+  },
+  "keywords": [
+    "sandhawke"
+  ],
+  "author": "Sandro Hawke (http://hawke.org/sandro)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/sandhawke/cliscore/issues"
+  },
+  "homepage": "https://github.com/sandhawke/cliscore#readme",
+  "dependencies": {
+    "debug": "^4.3.7"
+  },
+  "devDependencies": {
+  }
+}
