@@ -5,7 +5,7 @@
 
 import dbg from 'debug'
 import { parseTestFile } from './src/parser.js'
-import { executeCommand, createTempExecutionDir } from './src/executor.js'
+import { executeCommand, createTempExecutionDir, createTempScriptFile } from './src/executor.js'
 import { matchOutput } from './src/matcher.js'
 import { formatTAP } from './src/formatter.js'
 
@@ -36,6 +36,9 @@ export async function runTest(options) {
   const tempDir = executionDir || await createTempExecutionDir()
   debug(`Running test in directory: ${tempDir}`)
 
+  // Create a script file to maintain state between commands
+  const scriptFile = await createTempScriptFile(tempDir)
+
   // Parse test file
   const test = parseTestFile(content)
 
@@ -44,7 +47,8 @@ export async function runTest(options) {
     cwd: tempDir,
     env: { ...process.env, ...env },
     shell,
-    timeout
+    timeout,
+    scriptFile
   }
 
   const results = {

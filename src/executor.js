@@ -5,7 +5,7 @@
 
 import { spawn } from 'child_process'
 import dbg from 'debug'
-import { mkdtemp } from 'fs/promises'
+import { mkdtemp, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { existsSync, mkdirSync } from 'fs'
@@ -20,6 +20,7 @@ const debug = dbg('cliscore:executor')
  * @param {object} options.env - Environment variables (default: process.env)
  * @param {string} options.shell - Shell to use (default: /bin/bash)
  * @param {number} options.timeout - Timeout in milliseconds (default: 30000)
+ * @param {string} options.scriptFile - Path to a script file to append commands to (for persistent state)
  * @returns {Promise<object>} Object with stdout, stderr, and exitCode
  */
 export async function executeCommand(command, options = {}) {
@@ -27,6 +28,7 @@ export async function executeCommand(command, options = {}) {
   const env = options.env || process.env
   const shell = options.shell || '/bin/bash'
   const timeout = options.timeout || 30000 // Default timeout: 30s
+  const scriptFile = options.scriptFile || null
 
   debug(`Executing command: ${command}`)
   debug(`Working directory: ${cwd}`)
@@ -46,6 +48,12 @@ export async function executeCommand(command, options = {}) {
     CRAMTMP: cwd,
     // Set BASH_ENV to ensure non-interactive features are available
     BASH_ENV: ''
+  }
+
+  // If a script file is provided, append the command to it and execute the script
+  if (scriptFile) {
+    await appendToScriptFile(scriptFile, command)
+    return executeScriptFile(scriptFile, cwd, testEnv, timeout)
   }
 
   return new Promise((resolve, reject) => {
@@ -103,6 +111,80 @@ export async function executeCommand(command, options = {}) {
 }
 
 /**
+ * Append a command to a script file
+ * @param {string} scriptFile - Path to the script file
+ * @param {string} command - Command to append
+ * @returns {Promise<void>}
+ */
+async function appendToScriptFile(scriptFile, command) {
+  await writeFile(scriptFile, `${command}\n`, { flag: 'a' })
+  debug(`Appended command to script file: ${scriptFile}`)
+}
+
+/**
+ * Execute a script file and capture output
+ * @param {string} scriptFile - Path to the script file
+ * @param {string} cwd - Working directory
+ * @param {object} env - Environment variables
+ * @param {number} timeout - Timeout in milliseconds
+ * @returns {Promise<object>} Object with stdout, stderr, and exitCode
+ */
+async function executeScriptFile(scriptFile, cwd, env, timeout) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(env.SHELL, [scriptFile], {
+      cwd,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+
+    let stdout = ''
+    let stderr = ''
+    let killed = false
+
+    const timeoutId = setTimeout(() => {
+      debug(`Script execution timed out after ${timeout}ms`)
+      killed = true
+      child.kill()
+      resolve({
+        stdout,
+        stderr: stderr + `\nScript execution timed out after ${timeout}ms`,
+        exitCode: 124 // Timeout exit code
+      })
+    }, timeout)
+
+    child.stdout.on('data', (data) => {
+      const text = data.toString()
+      stdout += text
+      debug(`stdout: ${text.replace(/\n/g, '\\n')}`)
+    })
+
+    child.stderr.on('data', (data) => {
+      const text = data.toString()
+      stderr += text
+      debug(`stderr: ${text.replace(/\n/g, '\\n')}`)
+    })
+
+    child.on('close', (code) => {
+      if (!killed) {
+        clearTimeout(timeoutId)
+        debug(`Script exited with code: ${code}`)
+        resolve({
+          stdout,
+          stderr,
+          exitCode: code
+        })
+      }
+    })
+
+    child.on('error', (err) => {
+      clearTimeout(timeoutId)
+      debug(`Script execution error: ${err.message}`)
+      reject(err)
+    })
+  })
+}
+
+/**
  * Create a temporary execution directory
  * @returns {Promise<string>} Path to the temporary directory
  */
@@ -110,4 +192,16 @@ export async function createTempExecutionDir() {
   const tmpDir = await mkdtemp(join(tmpdir(), 'cliscore-'))
   debug(`Created temporary execution directory: ${tmpDir}`)
   return tmpDir
+}
+
+/**
+ * Create a temporary script file for a test
+ * @param {string} dir - Directory to create the script file in
+ * @returns {Promise<string>} Path to the script file
+ */
+export async function createTempScriptFile(dir) {
+  const scriptPath = join(dir, 'test-script.sh')
+  await writeFile(scriptPath, '#!/bin/bash\n\n', { mode: 0o755 })
+  debug(`Created temporary script file: ${scriptPath}`)
+  return scriptPath
 }
