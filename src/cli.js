@@ -44,6 +44,7 @@ export async function cli(args) {
       const result = await runTest({
         content,
         executionDir: testDir,
+        fileName: file, // Pass the filename for error reporting
         env: {
           // Pass the original source directory for reference
           TESTDIR: path.dirname(path.resolve(file)),

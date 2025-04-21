@@ -28,6 +28,13 @@ export function formatTAP(results) {
     } else {
       output += `not ok ${testNumber} - Output did not match expected results\n`
       output += '  ---\n'
+
+      // Include file and line information if available
+      if (result.lineInfo) {
+        const lineInfo = result.lineInfo
+        output += `  location: ${lineInfo.file}:${lineInfo.commandLine}\n`
+      }
+
       output += `  command: |\n    ${result.command.replace(/\n/g, '\n    ')}\n`
       output += `  expected: |\n${result.expectedOutput.map(line => `    ${line}`).join('\n')}\n`
       output += '  actual: |\n'

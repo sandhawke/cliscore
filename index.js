@@ -16,16 +16,18 @@ const debug = dbg('cliscore')
  * @param {object} options - Test options
  * @param {string} options.content - Content of the test file
  * @param {string} options.executionDir - Directory to execute commands in (default: temporary directory)
- * @param {object} options.env - Environment variables for commands (default: {})
+ * @param {string} options.fileName - Name of the test file (for error reporting)
+ * @param {object} options.env - Environment variables (default: {})
  * @param {function} options.onOutput - Callback for command output (default: null)
  * @param {string} options.shell - Shell to use for commands (default: /bin/bash)
- * @param {number} options.timeout - Command timeout in ms (default: 30000)
+ * @param {number} options.timeout - Command timeout in milliseconds (default: 30000)
  * @returns {Promise<object>} Test results
  */
 export async function runTest(options) {
   const {
     content,
     executionDir,
+    fileName,
     env = {},
     onOutput = null,
     shell = '/bin/bash',
@@ -40,7 +42,7 @@ export async function runTest(options) {
   const scriptFile = await createTempScriptFile(tempDir)
 
   // Parse test file
-  const test = parseTestFile(content)
+  const test = parseTestFile(content, { fileName })
 
   // Set up execution environment
   const execOptions = {
@@ -79,7 +81,8 @@ export async function runTest(options) {
       actualOutput: execResult.stdout + execResult.stderr,
       exitCode: execResult.exitCode,
       match: match.matched,
-      matchDetails: match.details
+      matchDetails: match.details,
+      lineInfo: command.lineInfo // Pass through line info for error reporting
     })
 
     if (!match.matched) {

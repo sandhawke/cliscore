@@ -48,7 +48,9 @@ export async function executeCommand(command, options = {}) {
   if (mightContainHereDoc) {
     tempScriptPath = join(cwd, `temp-cmd-${Date.now()}.sh`)
     // Source the script file if exists, then run the command
-    const scriptContent = scriptFile ? `#!/bin/bash\nsource "${scriptFile}" 2>/dev/null || true\n${command}\n` : `#!/bin/bash\n${command}\n`
+    const scriptContent = scriptFile ?
+      `#!/bin/bash\nsource "${scriptFile}" 2>/dev/null || true\n${command}\n` :
+      `#!/bin/bash\n${command}\n`
     await writeFile(tempScriptPath, scriptContent, { mode: 0o755 })
     debug(`Created temporary script at ${tempScriptPath}`)
   }
@@ -72,10 +74,11 @@ export async function executeCommand(command, options = {}) {
         stdio: ['ignore', 'pipe', 'pipe'],
       })
     } else {
-      // For regular commands, source the script file if exists, then run the command
+      // For regular commands, source the script file if exists for environment setup only
+      // The key fix is to redirect all output from sourcing to /dev/null
       let fullCommand = command
       if (scriptFile) {
-        fullCommand = `source "${scriptFile}" 2>/dev/null || true && ${command}`
+        fullCommand = `source "${scriptFile}" 2>/dev/null >/dev/null || true && ${command}`
       }
       childProcess = spawn(shell, ['-c', fullCommand], {
         cwd,
@@ -140,6 +143,7 @@ export async function executeCommand(command, options = {}) {
   }
 
   // After execution, append the command to the script file for state persistence
+  // Only add commands that set environment variables or do other stateful operations
   if (scriptFile) {
     await appendToScriptFile(scriptFile, command)
   }
@@ -156,7 +160,11 @@ export async function executeCommand(command, options = {}) {
 async function appendToScriptFile(scriptFile, command) {
   // Don't include exit status checks in the script file to avoid side effects
   const cleanCommand = command.replace(/\bexit\s+\d+\b/, '# $&')
-  await writeFile(scriptFile, `${cleanCommand}\n`, { flag: 'a' })
+
+  // Redirect all output from the command to /dev/null when sourced in the future
+  const commandWithRedirects = `{ ${cleanCommand}; } >/dev/null 2>&1`
+
+  await writeFile(scriptFile, `${commandWithRedirects}\n`, { flag: 'a' })
   debug(`Appended command to script file: ${scriptFile}`)
 }
 
