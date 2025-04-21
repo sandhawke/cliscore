@@ -50,14 +50,16 @@ export async function executeCommand(command, options = {}) {
     BASH_ENV: ''
   }
 
-  // If a script file is provided, append the command to it and execute the script
+  // If script file is provided, modify the command to source it first
+  let shellCommand = command
   if (scriptFile) {
-    await appendToScriptFile(scriptFile, command)
-    return executeScriptFile(scriptFile, cwd, testEnv, timeout)
+    // Source the script file (silently) to get state from previous commands
+    shellCommand = `source "${scriptFile}" > /dev/null 2>&1 || true; ${command}`
   }
 
-  return new Promise((resolve, reject) => {
-    const child = spawn(shell, ['-c', command], {
+  // Execute the command directly
+  const result = await new Promise((resolve, reject) => {
+    const child = spawn(shell, ['-c', shellCommand], {
       cwd,
       env: testEnv,
       stdio: ['ignore', 'pipe', 'pipe']
@@ -108,6 +110,13 @@ export async function executeCommand(command, options = {}) {
       reject(err)
     })
   })
+
+  // After execution, append the command to the script file for future state
+  if (scriptFile) {
+    await appendToScriptFile(scriptFile, command)
+  }
+
+  return result
 }
 
 /**
@@ -119,69 +128,6 @@ export async function executeCommand(command, options = {}) {
 async function appendToScriptFile(scriptFile, command) {
   await writeFile(scriptFile, `${command}\n`, { flag: 'a' })
   debug(`Appended command to script file: ${scriptFile}`)
-}
-
-/**
- * Execute a script file and capture output
- * @param {string} scriptFile - Path to the script file
- * @param {string} cwd - Working directory
- * @param {object} env - Environment variables
- * @param {number} timeout - Timeout in milliseconds
- * @returns {Promise<object>} Object with stdout, stderr, and exitCode
- */
-async function executeScriptFile(scriptFile, cwd, env, timeout) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(env.SHELL, [scriptFile], {
-      cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-
-    let stdout = ''
-    let stderr = ''
-    let killed = false
-
-    const timeoutId = setTimeout(() => {
-      debug(`Script execution timed out after ${timeout}ms`)
-      killed = true
-      child.kill()
-      resolve({
-        stdout,
-        stderr: stderr + `\nScript execution timed out after ${timeout}ms`,
-        exitCode: 124 // Timeout exit code
-      })
-    }, timeout)
-
-    child.stdout.on('data', (data) => {
-      const text = data.toString()
-      stdout += text
-      debug(`stdout: ${text.replace(/\n/g, '\\n')}`)
-    })
-
-    child.stderr.on('data', (data) => {
-      const text = data.toString()
-      stderr += text
-      debug(`stderr: ${text.replace(/\n/g, '\\n')}`)
-    })
-
-    child.on('close', (code) => {
-      if (!killed) {
-        clearTimeout(timeoutId)
-        debug(`Script exited with code: ${code}`)
-        resolve({
-          stdout,
-          stderr,
-          exitCode: code
-        })
-      }
-    })
-
-    child.on('error', (err) => {
-      clearTimeout(timeoutId)
-      debug(`Script execution error: ${err.message}`)
-      reject(err)
-    })
-  })
 }
 
 /**
