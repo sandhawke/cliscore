@@ -5,7 +5,7 @@
 
 import { spawn } from 'child_process'
 import dbg from 'debug'
-import { mkdtemp, writeFile } from 'fs/promises'
+import { writeFile } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { existsSync, mkdirSync } from 'fs'
@@ -53,8 +53,8 @@ export async function executeCommand(command, options = {}) {
   // If script file is provided, modify the command to source it first
   let shellCommand = command
   if (scriptFile) {
-    // Source the script file (silently) to get state from previous commands
-    shellCommand = `source "${scriptFile}" > /dev/null 2>&1 || true; ${command}`
+    // Source the script file in a subshell to isolate it from affecting the main command's exit code
+    shellCommand = `( source "${scriptFile}" > /dev/null 2>&1 || true ) && ( ${command} )`
   }
 
   // Execute the command directly
@@ -126,7 +126,9 @@ export async function executeCommand(command, options = {}) {
  * @returns {Promise<void>}
  */
 async function appendToScriptFile(scriptFile, command) {
-  await writeFile(scriptFile, `${command}\n`, { flag: 'a' })
+  // Don't include exit status checks in the script file to avoid side effects
+  const cleanCommand = command.replace(/\bexit\s+\d+\b/, '# $&')
+  await writeFile(scriptFile, `${cleanCommand}\n`, { flag: 'a' })
   debug(`Appended command to script file: ${scriptFile}`)
 }
 
@@ -135,9 +137,16 @@ async function appendToScriptFile(scriptFile, command) {
  * @returns {Promise<string>} Path to the temporary directory
  */
 export async function createTempExecutionDir() {
-  const tmpDir = await mkdtemp(join(tmpdir(), 'cliscore-'))
-  debug(`Created temporary execution directory: ${tmpDir}`)
-  return tmpDir
+  // Create a unique directory name based on timestamp and random string
+  const timestamp = Date.now()
+  const randomString = Math.random().toString(36).substring(2, 15)
+  const dirPath = join(tmpdir(), `cliscore-${timestamp}-${randomString}`)
+
+  // Ensure the directory exists
+  mkdirSync(dirPath, { recursive: true })
+  debug(`Created temporary execution directory: ${dirPath}`)
+
+  return dirPath
 }
 
 /**
