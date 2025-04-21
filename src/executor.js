@@ -8,7 +8,7 @@ import dbg from 'debug'
 import { writeFile } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { existsSync, mkdirSync } from 'fs'
+import { existsSync, mkdirSync, unlinkSync } from 'fs'
 
 const debug = dbg('cliscore:executor')
 
@@ -40,30 +40,49 @@ export async function executeCommand(command, options = {}) {
     mkdirSync(cwd, { recursive: true })
   }
 
-  // Prepare environment with test-specific variables
+  // Determine if this command might contain a here-document
+  const mightContainHereDoc = command.includes('<<')
+
+  // Create a temp script if the command might contain a here-document
+  let tempScriptPath = null
+  if (mightContainHereDoc) {
+    tempScriptPath = join(cwd, `temp-cmd-${Date.now()}.sh`)
+    // Source the script file if exists, then run the command
+    const scriptContent = scriptFile ? `#!/bin/bash\nsource "${scriptFile}" 2>/dev/null || true\n${command}\n` : `#!/bin/bash\n${command}\n`
+    await writeFile(tempScriptPath, scriptContent, { mode: 0o755 })
+    debug(`Created temporary script at ${tempScriptPath}`)
+  }
+
+  // Prepare environment
   const testEnv = {
     ...env,
     SHELL: shell,
-    // Add other useful environment variables for tests
     CRAMTMP: cwd,
-    // Set BASH_ENV to ensure non-interactive features are available
-    BASH_ENV: ''
   }
 
-  // If script file is provided, modify the command to source it first
-  let shellCommand = command
-  if (scriptFile) {
-    // Source the script file in a subshell to isolate it from affecting the main command's exit code
-    shellCommand = `( source "${scriptFile}" > /dev/null 2>&1 || true ) && ( ${command} )`
-  }
-
-  // Execute the command directly
+  // Execute the command
   const result = await new Promise((resolve, reject) => {
-    const child = spawn(shell, ['-c', shellCommand], {
-      cwd,
-      env: testEnv,
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
+    let childProcess
+
+    if (tempScriptPath) {
+      // Execute the temp script directly
+      childProcess = spawn(tempScriptPath, [], {
+        cwd,
+        env: testEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+    } else {
+      // For regular commands, source the script file if exists, then run the command
+      let fullCommand = command
+      if (scriptFile) {
+        fullCommand = `source "${scriptFile}" 2>/dev/null || true && ${command}`
+      }
+      childProcess = spawn(shell, ['-c', fullCommand], {
+        cwd,
+        env: testEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+    }
 
     let stdout = ''
     let stderr = ''
@@ -72,7 +91,7 @@ export async function executeCommand(command, options = {}) {
     const timeoutId = setTimeout(() => {
       debug(`Command timed out after ${timeout}ms`)
       killed = true
-      child.kill()
+      childProcess.kill()
       resolve({
         stdout,
         stderr: stderr + `\nCommand timed out after ${timeout}ms`,
@@ -80,19 +99,19 @@ export async function executeCommand(command, options = {}) {
       })
     }, timeout)
 
-    child.stdout.on('data', (data) => {
+    childProcess.stdout.on('data', (data) => {
       const text = data.toString()
       stdout += text
       debug(`stdout: ${text.replace(/\n/g, '\\n')}`)
     })
 
-    child.stderr.on('data', (data) => {
+    childProcess.stderr.on('data', (data) => {
       const text = data.toString()
       stderr += text
       debug(`stderr: ${text.replace(/\n/g, '\\n')}`)
     })
 
-    child.on('close', (code) => {
+    childProcess.on('close', (code) => {
       if (!killed) {
         clearTimeout(timeoutId)
         debug(`Command exited with code: ${code}`)
@@ -104,14 +123,23 @@ export async function executeCommand(command, options = {}) {
       }
     })
 
-    child.on('error', (err) => {
+    childProcess.on('error', (err) => {
       clearTimeout(timeoutId)
       debug(`Command execution error: ${err.message}`)
       reject(err)
     })
   })
 
-  // After execution, append the command to the script file for future state
+  // Clean up the temporary script
+  if (tempScriptPath) {
+    try {
+      unlinkSync(tempScriptPath)
+    } catch (err) {
+      debug(`Failed to delete temporary script: ${err.message}`)
+    }
+  }
+
+  // After execution, append the command to the script file for state persistence
   if (scriptFile) {
     await appendToScriptFile(scriptFile, command)
   }
