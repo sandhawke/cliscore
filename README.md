@@ -27,6 +27,9 @@ npm install
 ### Command Line
 
 ```bash
+# Run all tests (default: **/*.{t,md,cliscore})
+cliscore
+
 # Run a single test file
 cliscore tests/basic.t
 
@@ -42,6 +45,8 @@ cliscore --json tests/**/*.t
 # Allow additional markdown language identifiers
 cliscore --allow-lang shell-session tests/**/*.md
 ```
+
+By default, cliscore recursively finds all `.t`, `.md`, and `.cliscore` files, automatically ignoring `node_modules/`, `.git/`, and other common directories.
 
 ### Programmatic API
 

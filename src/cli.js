@@ -143,6 +143,28 @@ async function expandGlob(pattern) {
 }
 
 /**
+ * Check if a directory should be ignored
+ * @param {string} dirname - Directory name
+ * @returns {boolean}
+ */
+function shouldIgnoreDirectory(dirname) {
+  const ignoreDirs = [
+    'node_modules',
+    '.git',
+    '.svn',
+    '.hg',
+    'coverage',
+    'dist',
+    'build',
+    '.next',
+    '.nuxt',
+    'out',
+    'vendor'
+  ];
+  return ignoreDirs.includes(dirname) || dirname.startsWith('.');
+}
+
+/**
  * Recursively search directory for matching files
  * @param {string} dir - Current directory
  * @param {string[]} patternParts - Remaining pattern parts
@@ -159,13 +181,18 @@ async function searchDirectory(dir, patternParts, results) {
     const remainingParts = patternParts.slice(1);
 
     for (const entry of entries) {
+      // Skip ignored directories
+      if (shouldIgnoreDirectory(entry)) {
+        continue;
+      }
+
       const fullPath = join(dir, entry);
       const stats = await stat(fullPath);
 
       if (currentPattern === '**') {
         // Recursive wildcard
         if (stats.isDirectory()) {
-          // Continue with ** pattern
+          // Continue with ** pattern for subdirectories
           await searchDirectory(fullPath, patternParts, results);
           // Also try matching with remaining patterns
           if (remainingParts.length > 0) {
@@ -175,6 +202,15 @@ async function searchDirectory(dir, patternParts, results) {
           // ** at the end matches all files
           if (isTestFile(entry)) {
             results.push(fullPath);
+          }
+        } else if (remainingParts.length > 0) {
+          // ** in the middle - try matching file against remaining patterns
+          const nextPattern = remainingParts[0];
+          if (matchPattern(entry, nextPattern) && remainingParts.length === 1) {
+            // File matches the pattern after **
+            if (isTestFile(entry)) {
+              results.push(fullPath);
+            }
           }
         }
       } else if (matchPattern(entry, currentPattern)) {
@@ -242,10 +278,9 @@ async function main() {
   options.step = cliOptions.step;
   options.files = cliOptions.files;
 
+  // Default pattern if no files specified
   if (options.files.length === 0) {
-    console.error('Error: No test files specified');
-    console.error('Run with --help for usage information');
-    process.exit(1);
+    options.files = ['**/*.t', '**/*.md', '**/*.cliscore'];
   }
 
   const testFiles = await findTestFiles(options.files);
