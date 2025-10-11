@@ -14,6 +14,7 @@ function parseArgs(args) {
   const options = {
     json: false,
     dryRun: false,
+    step: false,
     allowedLanguages: ['cliscore'],
     files: [],
     jobs: 1
@@ -26,6 +27,8 @@ function parseArgs(args) {
       options.json = true;
     } else if (arg === '--dry-run') {
       options.dryRun = true;
+    } else if (arg === '--step') {
+      options.step = true;
     } else if (arg === '--fast') {
       options.jobs = 8;
     } else if (arg === '--jobs' || arg === '-j') {
@@ -67,6 +70,7 @@ Usage: cliscore [options] <test-files...>
 Options:
   --json              Output results as JSON
   --dry-run           Parse tests but don't execute them
+  --step              Interactive mode: prompt before each command, show output after
   --jobs N, -j N      Run N test files in parallel (default: 1)
   --fast              Run tests in parallel with 8 jobs (equivalent to --jobs 8)
   --allow-lang <lang> Allow additional markdown language identifier (can be used multiple times)
@@ -79,6 +83,7 @@ Test Files:
 Examples:
   cliscore tests/basic.t
   cliscore tests/**/*.md
+  cliscore --step tests/basic.t
   cliscore --fast tests/**/*.md
   cliscore --jobs 4 tests/**/*.t
   cliscore --json --dry-run tests/example.md
@@ -257,10 +262,17 @@ async function main() {
       }
     }
   } else {
+    // Step mode requires sequential execution
+    if (options.step && options.jobs > 1) {
+      console.error('Warning: --step mode requires sequential execution, setting --jobs 1');
+      options.jobs = 1;
+    }
+
     // Run the tests
     const results = await runTestFiles(testFiles, {
       allowedLanguages: options.allowedLanguages,
-      jobs: options.jobs
+      jobs: options.jobs,
+      step: options.step
     });
 
     if (options.json) {

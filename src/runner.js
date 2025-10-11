@@ -29,7 +29,9 @@ export async function runTestFile(filePath, options = {}) {
   const allowedLanguages = options.allowedLanguages || ['cliscore'];
 
   const testFile = await parseTestFile(filePath, allowedLanguages);
-  const executor = new Executor();
+  const executor = new Executor({
+    step: options.step || false
+  });
 
   const result = {
     file: filePath,

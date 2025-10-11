@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { randomBytes } from 'crypto';
 import { readFile, access } from 'fs/promises';
 import { resolve } from 'path';
+import * as readline from 'readline';
 
 /**
  * @typedef {import('./parser.js').TestCommand} TestCommand
@@ -24,6 +25,8 @@ export class Executor {
     this.shell = null;
     this.shellReady = false;
     this.setupScript = options.setupScript || null;
+    this.stepMode = options.step || false;
+    this.rl = null;
   }
 
   /**
@@ -39,6 +42,40 @@ export class Executor {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Prompt user for confirmation in step mode
+   * @param {string} command - The command to show
+   * @returns {Promise<boolean>}
+   */
+  async promptStep(command) {
+    if (!this.stepMode) {
+      return true;
+    }
+
+    if (!this.rl) {
+      this.rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+    }
+
+    // Show the command
+    const commandPreview = command.length > 100
+      ? command.substring(0, 100) + '...'
+      : command;
+
+    return new Promise((resolve) => {
+      this.rl.question(`\nAbout to run: ${commandPreview}\nContinue? [Y/n] `, (answer) => {
+        const normalized = answer.trim().toLowerCase();
+        if (normalized === 'n' || normalized === 'no') {
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      });
+    });
   }
 
   /**
@@ -91,8 +128,20 @@ export class Executor {
       throw new Error('Executor not started. Call start() first.');
     }
 
-    const marker = this.generateMarker();
     const { command } = testCommand;
+
+    // In step mode, ask for confirmation
+    const shouldRun = await this.promptStep(command);
+    if (!shouldRun) {
+      return {
+        success: false,
+        stdout: [],
+        stderr: ['Test skipped by user'],
+        exitCode: 0
+      };
+    }
+
+    const marker = this.generateMarker();
 
     return new Promise((resolve) => {
       const stdoutLines = [];
@@ -109,12 +158,29 @@ export class Executor {
 
       const checkComplete = () => {
         if (stdoutComplete && stderrComplete) {
-          resolve({
+          const result = {
             success: exitCode === 0,
             stdout: stdoutLines,
             stderr: stderrLines,
             exitCode: exitCode ?? 0
-          });
+          };
+
+          // In step mode, show the output
+          if (this.stepMode) {
+            console.log('\n--- Output ---');
+            if (stdoutLines.length > 0) {
+              console.log('stdout:');
+              stdoutLines.forEach(line => console.log('  ' + line));
+            }
+            if (stderrLines.length > 0) {
+              console.log('stderr:');
+              stderrLines.forEach(line => console.log('  ' + line));
+            }
+            console.log(`Exit code: ${exitCode ?? 0}`);
+            console.log('--- End Output ---\n');
+          }
+
+          resolve(result);
         }
       };
 
@@ -211,6 +277,11 @@ echo "${stderrEndMarker}" >&2
    * Close the shell process
    */
   close() {
+    if (this.rl) {
+      this.rl.close();
+      this.rl = null;
+    }
+
     if (this.shell) {
       // Call cliscore_teardown if defined
       if (this.setupScript) {
