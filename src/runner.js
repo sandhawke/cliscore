@@ -74,30 +74,77 @@ export async function runTestFile(filePath, options = {}) {
  * Run tests from multiple files
  * @param {string[]} filePaths - Paths to test files
  * @param {Object} options - Runner options
+ * @param {number} [options.jobs=1] - Number of test files to run in parallel
  * @returns {Promise<TestResult[]>}
  */
 export async function runTestFiles(filePaths, options = {}) {
-  const results = [];
+  const jobs = options.jobs || 1;
 
-  for (const filePath of filePaths) {
-    try {
-      const result = await runTestFile(filePath, options);
-      results.push(result);
-    } catch (error) {
-      results.push({
-        file: filePath,
-        passed: 0,
-        failed: 1,
-        failures: [{
-          command: '',
-          lineNumber: 0,
-          error: `Failed to run test file: ${error.message}`
-        }]
-      });
+  if (jobs === 1) {
+    // Sequential execution
+    const results = [];
+    for (const filePath of filePaths) {
+      try {
+        const result = await runTestFile(filePath, options);
+        results.push(result);
+      } catch (error) {
+        results.push({
+          file: filePath,
+          passed: 0,
+          failed: 1,
+          failures: [{
+            command: '',
+            lineNumber: 0,
+            error: `Failed to run test file: ${error.message}`
+          }]
+        });
+      }
     }
+    return results;
   }
 
-  return results;
+  // Parallel execution with limited concurrency
+  const results = new Array(filePaths.length);
+  let index = 0;
+  let activeWorkers = 0;
+
+  return new Promise((resolve) => {
+    const runNext = () => {
+      while (activeWorkers < jobs && index < filePaths.length) {
+        const currentIndex = index;
+        const filePath = filePaths[index];
+        index++;
+        activeWorkers++;
+
+        runTestFile(filePath, options)
+          .then(result => {
+            results[currentIndex] = result;
+          })
+          .catch(error => {
+            results[currentIndex] = {
+              file: filePath,
+              passed: 0,
+              failed: 1,
+              failures: [{
+                command: '',
+                lineNumber: 0,
+                error: `Failed to run test file: ${error.message}`
+              }]
+            };
+          })
+          .finally(() => {
+            activeWorkers--;
+            if (index >= filePaths.length && activeWorkers === 0) {
+              resolve(results);
+            } else {
+              runNext();
+            }
+          });
+      }
+    };
+
+    runNext();
+  });
 }
 
 /**

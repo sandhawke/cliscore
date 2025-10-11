@@ -15,7 +15,8 @@ function parseArgs(args) {
     json: false,
     dryRun: false,
     allowedLanguages: ['cliscore'],
-    files: []
+    files: [],
+    jobs: 1
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -25,6 +26,19 @@ function parseArgs(args) {
       options.json = true;
     } else if (arg === '--dry-run') {
       options.dryRun = true;
+    } else if (arg === '--fast') {
+      options.jobs = 8;
+    } else if (arg === '--jobs' || arg === '-j') {
+      if (i + 1 >= args.length) {
+        console.error('Error: --jobs requires a number');
+        process.exit(1);
+      }
+      const jobs = parseInt(args[++i], 10);
+      if (isNaN(jobs) || jobs < 1) {
+        console.error('Error: --jobs must be a positive number');
+        process.exit(1);
+      }
+      options.jobs = jobs;
     } else if (arg === '--allow-lang' && i + 1 < args.length) {
       options.allowedLanguages.push(args[++i]);
     } else if (arg === '--help' || arg === '-h') {
@@ -53,6 +67,8 @@ Usage: cliscore [options] <test-files...>
 Options:
   --json              Output results as JSON
   --dry-run           Parse tests but don't execute them
+  --jobs N, -j N      Run N test files in parallel (default: 1)
+  --fast              Run tests in parallel with 8 jobs (equivalent to --jobs 8)
   --allow-lang <lang> Allow additional markdown language identifier (can be used multiple times)
   -h, --help          Show this help message
 
@@ -63,6 +79,8 @@ Test Files:
 Examples:
   cliscore tests/basic.t
   cliscore tests/**/*.md
+  cliscore --fast tests/**/*.md
+  cliscore --jobs 4 tests/**/*.t
   cliscore --json --dry-run tests/example.md
   cliscore --allow-lang shell-session tests/**/*.md
 `);
@@ -241,7 +259,8 @@ async function main() {
   } else {
     // Run the tests
     const results = await runTestFiles(testFiles, {
-      allowedLanguages: options.allowedLanguages
+      allowedLanguages: options.allowedLanguages,
+      jobs: options.jobs
     });
 
     if (options.json) {
