@@ -16,6 +16,7 @@ function parseArgs(args) {
     json: false,
     dryRun: false,
     step: false,
+    percent: false,
     allowedLanguages: ['cliscore'],
     files: [],
     jobs: 1
@@ -30,6 +31,8 @@ function parseArgs(args) {
       options.dryRun = true;
     } else if (arg === '--step') {
       options.step = true;
+    } else if (arg === '--percent') {
+      options.percent = true;
     } else if (arg === '--fast') {
       options.jobs = 8;
     } else if (arg === '--jobs' || arg === '-j') {
@@ -72,6 +75,7 @@ Options:
   --json              Output results as JSON
   --dry-run           Parse tests but don't execute them
   --step              Interactive mode: prompt before each command, show output after
+  --percent           Output only the pass percentage (e.g., "95.5")
   --jobs N, -j N      Run N test files in parallel (default: 1)
   --fast              Run tests in parallel with 8 jobs (equivalent to --jobs 8)
   --allow-lang <lang> Allow additional markdown language identifier (can be used multiple times)
@@ -276,6 +280,7 @@ async function main() {
   options.json = cliOptions.json;
   options.dryRun = cliOptions.dryRun;
   options.step = cliOptions.step;
+  options.percent = cliOptions.percent;
   options.files = cliOptions.files;
 
   // Default pattern if no files specified
@@ -330,15 +335,18 @@ async function main() {
       step: options.step
     });
 
-    if (options.json) {
-      const summary = getSummary(results);
+    const summary = getSummary(results);
+
+    if (options.percent) {
+      // Only output the percentage
+      console.log(summary.passRate.toFixed(1));
+    } else if (options.json) {
       console.log(JSON.stringify({ summary, results }, null, 2));
     } else {
       console.log(formatResults(results));
     }
 
     // Exit with error code if any tests failed
-    const summary = getSummary(results);
     if (summary.totalFailed > 0) {
       process.exit(1);
     }
