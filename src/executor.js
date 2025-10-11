@@ -90,22 +90,42 @@ export class Executor {
 
       const stdoutHandler = (data) => {
         stdoutBuffer += data.toString();
-        const lines = stdoutBuffer.split('\n');
 
-        // Keep the last incomplete line in the buffer
-        stdoutBuffer = lines.pop() || '';
+        // Check if we have the end marker
+        const markerRegex = new RegExp(`${stdoutEndMarker}:(\\d+)`);
+        const markerMatch = stdoutBuffer.match(markerRegex);
 
-        for (const line of lines) {
-          // Check for our end marker
-          const markerMatch = line.match(new RegExp(`${stdoutEndMarker}:(\\d+)$`));
-          if (markerMatch) {
-            exitCode = parseInt(markerMatch[1], 10);
-            stdoutComplete = true;
-            this.shell.stdout.off('data', stdoutHandler);
-            checkComplete();
-            return;
+        if (markerMatch) {
+          // Extract everything before the marker
+          const outputBeforeMarker = stdoutBuffer.substring(0, markerMatch.index);
+
+          // Split on newlines but preserve all parts
+          if (outputBeforeMarker) {
+            const lines = outputBeforeMarker.split('\n');
+            // If the output ended with a newline, remove the empty last element
+            if (lines[lines.length - 1] === '' && lines.length > 1) {
+              lines.pop();
+            }
+            stdoutLines.push(...lines);
           }
-          stdoutLines.push(line);
+
+          exitCode = parseInt(markerMatch[1], 10);
+          stdoutComplete = true;
+          this.shell.stdout.off('data', stdoutHandler);
+          checkComplete();
+          return;
+        }
+
+        // Process complete lines, keep incomplete ones in buffer
+        const newlineIndex = stdoutBuffer.lastIndexOf('\n');
+        if (newlineIndex !== -1) {
+          const completeLines = stdoutBuffer.substring(0, newlineIndex);
+          stdoutBuffer = stdoutBuffer.substring(newlineIndex + 1);
+
+          if (completeLines) {
+            const lines = completeLines.split('\n');
+            stdoutLines.push(...lines);
+          }
         }
       };
 
@@ -132,7 +152,8 @@ export class Executor {
       this.shell.stderr.on('data', stderrHandler);
 
       // Execute the command followed by marker echoes
-      const fullCommand = `${command}
+      // Wrap in a subshell to prevent exit commands from killing the main shell
+      const fullCommand = `(${command})
 __EXIT_CODE=$?
 echo "${stdoutEndMarker}:$__EXIT_CODE"
 echo "${stderrEndMarker}" >&2

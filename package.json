@@ -8,7 +8,9 @@
     "cliscore": "src/cli.js"
   },
   "scripts": {
-    "test": "node src/cli.js tests/**/*.md tests/**/*.t tests/**/*.cliscore"
+    "test": "node --test test/**/*.test.js",
+    "test:examples": "node src/cli.js test/fixtures/example.t test/fixtures/example.md",
+    "test:all": "npm test && npm run test:examples"
   },
   "keywords": [
     "testing",
