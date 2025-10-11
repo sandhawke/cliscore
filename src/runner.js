@@ -44,13 +44,11 @@ export async function runTestFile(filePath, options = {}) {
     for (const test of testFile.tests) {
       const executionResult = await executor.execute(test);
 
-      // Combine stdout and stderr for matching
-      const allOutput = [...executionResult.stdout];
-      if (executionResult.stderr.length > 0) {
-        allOutput.push(...executionResult.stderr);
-      }
-
-      const matchResult = matchOutput(allOutput, test.expectedOutput);
+      const matchResult = matchOutput(
+        executionResult.stdout,
+        executionResult.stderr,
+        test.expectedOutput
+      );
 
       if (matchResult.success) {
         result.passed++;
@@ -60,7 +58,8 @@ export async function runTestFile(filePath, options = {}) {
           command: test.command,
           lineNumber: test.lineNumber,
           error: matchResult.error || 'Unknown error',
-          actualOutput: allOutput
+          actualOutput: executionResult.stdout,
+          actualStderr: executionResult.stderr
         });
       }
     }

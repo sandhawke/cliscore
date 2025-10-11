@@ -11,11 +11,18 @@
 
 /**
  * Match actual output against expected output patterns
- * @param {string[]} actualLines - Actual output lines
+ * @param {string[]} stdout - Actual stdout lines
+ * @param {string[]} stderr - Actual stderr lines
  * @param {OutputExpectation[]} expectations - Expected output patterns
  * @returns {MatchResult}
  */
-export function matchOutput(actualLines, expectations) {
+export function matchOutput(stdout, stderr, expectations) {
+  // Combine stdout and stderr with metadata about which stream each line came from
+  const combinedOutput = [
+    ...stdout.map(line => ({ line, stream: 'stdout' })),
+    ...stderr.map(line => ({ line, stream: 'stderr' }))
+  ];
+
   let actualIndex = 0;
   let expectIndex = 0;
 
@@ -29,15 +36,19 @@ export function matchOutput(actualLines, expectations) {
 
       if (expectIndex >= expectations.length) {
         // Ellipsis at the end matches everything remaining
-        return { success: true, linesConsumed: actualLines.length };
+        return { success: true, linesConsumed: combinedOutput.length };
       }
 
       // Find where the next expectation matches
       const nextExpectation = expectations[expectIndex];
       let found = false;
 
-      for (let i = actualIndex; i < actualLines.length; i++) {
-        const result = matchSingleLine(actualLines[i], nextExpectation);
+      for (let i = actualIndex; i < combinedOutput.length; i++) {
+        const expectedStream = nextExpectation.stream || 'stdout';
+        if (combinedOutput[i].stream !== expectedStream) {
+          continue;
+        }
+        const result = matchSingleLine(combinedOutput[i].line, nextExpectation);
         if (result.success) {
           actualIndex = i;
           found = true;
@@ -48,25 +59,31 @@ export function matchOutput(actualLines, expectations) {
       if (!found) {
         return {
           success: false,
-          error: `Could not find match for pattern after ellipsis: ${formatExpectation(nextExpectation)}`
+          error: `Could not find match for pattern after ellipsis: ${formatExpectation(expectation)}`
         };
       }
       // Continue to match the next expectation normally
       continue;
     }
 
-    if (actualIndex >= actualLines.length) {
+    // Find next line from the expected stream
+    const expectedStream = expectation.stream || 'stdout';
+    while (actualIndex < combinedOutput.length && combinedOutput[actualIndex].stream !== expectedStream) {
+      actualIndex++;
+    }
+
+    if (actualIndex >= combinedOutput.length) {
       return {
         success: false,
-        error: `Expected more output. Missing: ${formatExpectation(expectation)}`
+        error: `Expected more ${expectedStream}. Missing: ${formatExpectation(expectation)}`
       };
     }
 
-    const result = matchSingleLine(actualLines[actualIndex], expectation);
+    const result = matchSingleLine(combinedOutput[actualIndex].line, expectation);
     if (!result.success) {
       return {
         success: false,
-        error: `Line ${actualIndex + 1}: ${result.error}\n  Expected: ${formatExpectation(expectation)}\n  Got: ${actualLines[actualIndex]}`
+        error: `Line ${actualIndex + 1} (${expectedStream}): ${result.error}\n  Expected: ${formatExpectation(expectation)}\n  Got: ${combinedOutput[actualIndex].line}`
       };
     }
 
@@ -74,11 +91,16 @@ export function matchOutput(actualLines, expectations) {
     expectIndex++;
   }
 
-  // Check if there's unexpected extra output
-  if (actualIndex < actualLines.length) {
+  // Check if there's unexpected extra output (only on the streams we were checking)
+  const unmatchedLines = [];
+  for (let i = actualIndex; i < combinedOutput.length; i++) {
+    unmatchedLines.push(`[${combinedOutput[i].stream}] ${combinedOutput[i].line}`);
+  }
+
+  if (unmatchedLines.length > 0) {
     return {
       success: false,
-      error: `Unexpected extra output:\n  ${actualLines.slice(actualIndex).join('\n  ')}`
+      error: `Unexpected extra output:\n  ${unmatchedLines.join('\n  ')}`
     };
   }
 

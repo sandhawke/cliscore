@@ -10,9 +10,10 @@ import { basename } from 'path';
 
 /**
  * @typedef {Object} OutputExpectation
- * @property {'literal'|'regex'|'glob'|'ellipsis'|'no-eol'} type
+ * @property {'literal'|'regex'|'glob'|'ellipsis'|'no-eol'|'stderr'} type
  * @property {string} [pattern] - Pattern to match (not used for ellipsis)
  * @property {string} [flags] - Regex flags (for regex type)
+ * @property {'stdout'|'stderr'} [stream] - Which stream to match (defaults to stdout)
  */
 
 /**
@@ -232,7 +233,10 @@ function parseOutputExpectations(lines) {
     else if (line.startsWith('[') && line.endsWith(']')) {
       const inside = line.slice(1, -1);
 
-      if (inside.startsWith('Literal text: ')) {
+      if (inside.startsWith('stderr:')) {
+        const pattern = inside.slice(7).trim();
+        expectations.push({ type: 'literal', pattern, stream: 'stderr' });
+      } else if (inside.startsWith('Literal text: ')) {
         const pattern = inside.slice(14).replace(/^"(.*)"$/, '$1');
         expectations.push({ type: 'literal', pattern });
       } else if (inside.startsWith('Matching glob: ')) {
