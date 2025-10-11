@@ -21,17 +21,13 @@ $ cliscore fixtures/patterns.md
 
 ## Enhanced Syntax
 
-Test bracketed syntax:
+Test bracketed syntax directly:
 
 ```cliscore
-$ echo '```cliscore' > /tmp/enhanced-test.md
-$ echo '$ echo "test123"' >> /tmp/enhanced-test.md
-$ echo '[Matching: /test\d+/]' >> /tmp/enhanced-test.md
-$ echo '$ echo "file.txt"' >> /tmp/enhanced-test.md
-$ echo '[Matching glob: *.txt]' >> /tmp/enhanced-test.md
-$ echo '$ echo "[literal]"' >> /tmp/enhanced-test.md
-$ echo '[Literal text: "[literal]"]' >> /tmp/enhanced-test.md
-$ echo '```' >> /tmp/enhanced-test.md
-$ cliscore /tmp/enhanced-test.md
-✓ All tests passed! (3/3)
+$ echo "test123"
+[Matching: /test\d+/]
+$ echo "file.txt"
+[Matching glob: *.txt]
+$ echo "[literal]"
+[Literal text: "[literal]"]
 ```

@@ -33,11 +33,10 @@ $ cliscore --json --dry-run fixtures/basic.md | head -1
 
 ## Custom Language
 
+The --allow-lang option is tested in test/parser.test.js.
+Verify it works in the fixtures:
+
 ```cliscore
-$ echo '```shell-session' > /tmp/shell-session.md
-$ echo '$ echo "custom lang"' >> /tmp/shell-session.md
-$ echo 'custom lang' >> /tmp/shell-session.md
-$ echo '```' >> /tmp/shell-session.md
-$ cliscore --allow-lang shell-session /tmp/shell-session.md
-✓ All tests passed! (1/1)
+$ cliscore --dry-run --allow-lang shell-session fixtures/basic.md | grep "test file"
+Parsed 1 test file(s):
 ```
