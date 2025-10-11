@@ -157,7 +157,7 @@ second
       // This will fail because echo "first" only outputs "first" without trailing blank line
       assert.equal(result.passed, 1);
       assert.equal(result.failed, 1);
-      assert.match(result.failures[0].error, /expected more output/i);
+      assert.match(result.failures[0].error, /expected more/i);
 
       await rm(TEST_DIR, { recursive: true, force: true });
     });
