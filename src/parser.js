@@ -112,7 +112,7 @@ function parseMarkdownFormat(content, allowedLanguages) {
     lineNumber++;
 
     // Check for code block start/end
-    const codeBlockMatch = line.match(/^```(\w+)?/);
+    const codeBlockMatch = line.match(/^```([\w-]+)?/);
     if (codeBlockMatch) {
       if (!inCodeBlock) {
         const lang = codeBlockMatch[1] || '';
@@ -186,16 +186,9 @@ function parseCodeBlock(content, startLine) {
         currentCommand.command += '\n' + line.replace(/^\s*> /, '');
       }
     }
-    // Output line
-    else if (line && currentCommand) {
+    // Output line (including empty lines)
+    else if (currentCommand) {
       currentOutput.push(line);
-    }
-    // Empty lines when we have a command mean the command is done
-    else if (!line && currentCommand && currentOutput.length > 0) {
-      currentCommand.expectedOutput = parseOutputExpectations(currentOutput);
-      tests.push(currentCommand);
-      currentCommand = null;
-      currentOutput = [];
     }
   }
 

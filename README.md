@@ -91,6 +91,26 @@ alice@server$ echo "user@host prompt"
 user@host prompt
 ```
 
+### Important: Whitespace and Empty Lines
+
+In markdown code blocks, tests are separated by command prompts (`$` or `#`), not by blank lines. This means:
+
+- **Empty lines in output are preserved** and must match exactly
+- **Blank lines between commands** are treated as part of the expected output
+- To separate commands visually without expecting blank output, place them on consecutive lines
+
+Example:
+```cliscore
+$ printf "line1\n\nline3"
+line1
+
+line3
+$ echo "next command"
+next command
+```
+
+The first command expects three lines of output (including the blank line). The second command starts immediately after.
+
 ## Output Matching
 
 ### Literal Matching
