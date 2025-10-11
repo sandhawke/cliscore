@@ -1,5 +1,7 @@
 import { spawn } from 'child_process';
 import { randomBytes } from 'crypto';
+import { readFile, access } from 'fs/promises';
+import { resolve } from 'path';
 
 /**
  * @typedef {import('./parser.js').TestCommand} TestCommand
@@ -18,9 +20,25 @@ import { randomBytes } from 'crypto';
  * Executor for running shell commands with output capture
  */
 export class Executor {
-  constructor() {
+  constructor(options = {}) {
     this.shell = null;
     this.shellReady = false;
+    this.setupScript = options.setupScript || null;
+  }
+
+  /**
+   * Load cliscore.sh setup script if it exists
+   * @returns {Promise<string|null>}
+   */
+  async loadSetupScript() {
+    try {
+      const setupPath = resolve(process.cwd(), 'cliscore.sh');
+      await access(setupPath);
+      const content = await readFile(setupPath, 'utf-8');
+      return content;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -28,6 +46,11 @@ export class Executor {
    * @returns {Promise<void>}
    */
   async start() {
+    // Load setup script if not already provided
+    if (this.setupScript === null) {
+      this.setupScript = await this.loadSetupScript();
+    }
+
     return new Promise((resolve, reject) => {
       this.shell = spawn('/bin/sh', [], {
         stdio: ['pipe', 'pipe', 'pipe']
@@ -42,6 +65,13 @@ export class Executor {
           reject(new Error(`Shell exited prematurely with code ${code}`));
         }
       });
+
+      // Source the setup script if it exists
+      if (this.setupScript) {
+        this.shell.stdin.write(this.setupScript + '\n');
+        // Call cliscore_setup if defined
+        this.shell.stdin.write('type cliscore_setup >/dev/null 2>&1 && cliscore_setup\n');
+      }
 
       // Wait a bit for shell to be ready
       setTimeout(() => {
@@ -182,6 +212,14 @@ echo "${stderrEndMarker}" >&2
    */
   close() {
     if (this.shell) {
+      // Call cliscore_teardown if defined
+      if (this.setupScript) {
+        try {
+          this.shell.stdin.write('type cliscore_teardown >/dev/null 2>&1 && cliscore_teardown\n');
+        } catch {
+          // Ignore errors during teardown
+        }
+      }
       this.shell.stdin.end();
       this.shell.kill();
       this.shell = null;
