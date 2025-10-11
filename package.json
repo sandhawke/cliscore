@@ -1,0 +1,24 @@
+{
+  "name": "cliscore",
+  "version": "0.1.0",
+  "description": "A test runner for command-line interfaces, extending the Mercurial unified test format",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "cliscore": "src/cli.js"
+  },
+  "scripts": {
+    "test": "node src/cli.js tests/**/*.md tests/**/*.t tests/**/*.cliscore"
+  },
+  "keywords": [
+    "testing",
+    "cli",
+    "test-runner",
+    "shell",
+    "unified-test-format"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}
