@@ -157,6 +157,24 @@ first line
 last line
 ```
 
+### Stderr Matching
+
+Match stderr output using `[stderr:]` syntax:
+
+```cliscore
+$ echo "output" && echo "error" >&2
+output
+[stderr: error]
+```
+
+Multiple stderr lines:
+```cliscore
+$ command-with-errors
+normal output
+[stderr: error line 1]
+[stderr: error line 2]
+```
+
 ### Special Cases
 
 ```cliscore
@@ -173,8 +191,52 @@ no newline (no-eol)
 
 - `--json`: Output results as JSON
 - `--dry-run`: Parse tests without executing them
+- `--jobs N`, `-j N`: Run N test files in parallel (default: 1)
+- `--fast`: Run tests in parallel with 8 jobs (equivalent to --jobs 8)
 - `--allow-lang <lang>`: Allow additional markdown language identifiers
 - `--help`, `-h`: Show help message
+
+## Performance
+
+Run tests in parallel for faster execution:
+
+```bash
+# Run with 4 parallel jobs
+cliscore --jobs 4 tests/**/*.md
+
+# Quick parallel execution
+cliscore --fast tests/**/*.md
+```
+
+Note: Tests within a single file run sequentially (they share the same shell environment), but multiple test files run in parallel.
+
+## Setup and Teardown
+
+Create a `cliscore.sh` file in your project root to define setup and teardown functions:
+
+```bash
+#!/bin/sh
+
+# Called once at the start of each test shell
+cliscore_setup() {
+    export TEST_VAR="value"
+    export PATH="/custom/path:$PATH"
+    # mkdir -p /tmp/test-workspace
+}
+
+# Called once before the shell exits
+cliscore_teardown() {
+    # rm -rf /tmp/test-workspace
+    true
+}
+
+# Define helper functions for tests to use
+test_helper() {
+    echo "Helper: $1"
+}
+```
+
+The file is sourced automatically if present. Setup/teardown functions are invisible (don't appear in test output), but helper functions can be called explicitly in tests.
 
 ## Architecture
 
