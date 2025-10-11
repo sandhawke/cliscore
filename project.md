@@ -1,79 +1,134 @@
-This is the spec for cliscore, a new unix command line tool. 
+# cliscore - CLI Test Runner
+
+A test runner for command-line interfaces, extending the Mercurial unified test format (UTF).
 
 ## Goals
 
-Our primary goal with cliscore is to help AI coding tools create the software we want. With cliscore, we focus on the external behavior of programs with command-line interfaces (CLIs). Internal behavior is tested only by adding features which expose it to the outside.
+Help developers and AI tools create correct software by testing external behavior of command-line programs. Tests should be readable enough that anyone can verify they express the desired behavior.
 
-The basic goal is to have tests which are easy as possible for the users to read and understand, so they can confirm the tests actually express the desired behavior of the program.
+## Implementation
 
-## Strategy
+Tests look like shell sessions with unnecessary details omitted.
 
-We use tests that look like shell sessions, with unnecessary details left out.
+### File Formats
 
-There is an existing test format designed like this, the mercurial (hg) unified test format (utf), which was also implemented by cram. cliscore can run utf tests, but we extend the format in a few ways:
+- **.t files**: UTF format (two-space indented)
+- **.md files**: Markdown with fenced code blocks (language: `cliscore` by default)
+- **.cliscore files**: Either format accepted
 
-1. We accept markdown files, looking for tests in triple backtick fenced code blocks. By default, the language on the triple backticks must be "cliscore", but cliscore can be configured to allow other language idenfiers, such as "shell-session" or "bash". The recommended configuration is shell-session code blocks, but that is not the default because we want to reduce the risk of cliscore running a shell-session which is not safe to run.
+Configure alternate markdown languages with `--allow-lang <identifier>` (e.g., `shell-session`).
 
-2. We accept prompts like alice$ and alice@host$ to simplify writing tests for multiuser and cross-host software.
+### Test Execution
 
-3. In addition to utf's "(re)" convention for allowing regular expressions in tests, we support a syntax that makes sense to English readers without explanation.
+1. Parse test file into sequence of command + expected output pairs
+2. Spawn shell and source `cliscore.sh` if present
+3. For each test:
+   - Execute command in subshell `(command)`
+   - Capture exit code: `__EXIT_CODE=$?`
+   - Echo unique markers to stdout and stderr with exit code
+   - Parse output streams separately
+   - Match against expectations
+4. Call teardown and close shell
 
-4. We support a test setup and teardown mechanism
+Multiple test files can run in parallel (`--jobs N` or `--fast`). Tests within a file run sequentially (shared shell environment).
 
-In general, cliscore operated by parsing each test file into a connected sequence of tests. Each test in the sequence is a command and a description of its acceptable output. cliscore runs the sequence of tests by opening a pipe to a shell, an executing each command followed by an echo of a statistically-unique end marker (structured to include the command exist status) to each of stdout and stderr. Meanwhile, cliscore reads stdout and stderr, looking for the end markers, and matches the output to the description that was part of the test.
+### Syntax
 
-We accept .t files from utf, but also .cliscore and .md.
+#### Commands
+- Prompts: `$ command` or `# command`
+- User prompts: `alice$ command` or `alice@host$ command` (parsed but not executed differently)
+- Continuation: `> continued line` (with optional leading whitespace)
 
-Prompts end in '$ ' or '# '.
+#### Output Matching
 
-Continuation prompts are /\s*> /
+**Literal**: Exact text match
+```
+  expected text
+```
 
-cliscore --json --dry-run just outputs json expressing all the details of the tests it parsed.
+**Regular expressions**:
+```
+  pattern\d+ (re)          # UTF style
+  [Matching: /pattern/i]   # Enhanced with flags
+```
 
-Conceptually, cliscore could run each of the test files it finds in parallel.
+**Glob patterns**:
+```
+  file*.txt (glob)         # UTF style
+  [Matching glob: *.txt]   # Enhanced
+```
 
-urf format:
+**Ellipsis**: Zero or more lines
+```
+  ...
+```
 
-    All tests use the .t file extension.
+**Stderr**: Match error output
+```
+  [stderr: error message]
+```
 
-    Lines beginning with two spaces, a dollar sign, and a space are run in the shell.
+**Special cases**:
+```
+  [Literal text: "[brackets]"]            # Escape brackets
+  [Output ends without end-of-line]       # No trailing newline
+  text (no-eol)                           # UTF style no-eol
+```
 
-    Lines beginning with two spaces, a greater than sign, and a space allow multi-line commands.
+**Empty lines**: Preserved and must match exactly in markdown code blocks. Tests separated by prompts, not blank lines.
 
-    All other lines beginning with two spaces are considered command output.
+### UTF Format Details
 
-    Output lines ending with a space and the keyword (re) are matched as Perl-compatible regular expressions.
+- Two-space indentation required
+- `  $ command` or `  # command` for commands
+- `  > continuation` for multiline
+- `  output` for expected output
+- Lines not matching these patterns are comments
 
-    Lines ending with a space and the keyword (glob) are matched with a glob-like syntax. The only special characters supported are * and ?. Both characters can be escaped using \, and the backslash can be escaped itself.
+### Setup and Teardown
 
-    Output lines ending with either of the above keywords are always first matched literally with actual command output.
+Optional `cliscore.sh` in project root:
 
-    Lines ending with a space and the keyword (no-eol) will match actual output that doesn't end in a newline.
+```sh
+cliscore_setup() {
+    # Runs once at shell start
+    export MY_VAR="value"
+}
 
-    Actual output lines containing unprintable characters are escaped and suffixed with a space and the keyword (esc). Lines matching unprintable output must also contain the keyword.
+cliscore_teardown() {
+    # Runs once before shell exit
+    # cleanup code
+}
 
-    Anything else is a comment.
+helper_function() {
+    # Available to tests
+}
+```
 
-In .md files, cliscore needs triple backtick fenced code blocks.
+Functions are sourced invisibly. Only explicit calls appear in test output.
 
-In .cliscore files, cliscore accepts either format.
+### Command Line Options
 
-In the output expression, cliscore looks for lines '...' and lines in brackets. In brackets we have some special mean structues:
-* [Literal text: "[something in square brackets]"]
-* [Matching glob: some expr*]
-* [Matching: some re]
-* [Output ends without end-of-line]
+- `--json`: JSON output
+- `--dry-run`: Parse without executing
+- `--jobs N`, `-j N`: Run N files in parallel (default: 1)
+- `--fast`: Alias for `--jobs 8`
+- `--allow-lang <lang>`: Additional markdown language identifiers
+- `-h`, `--help`: Show help
 
-The text '...' (without the quotes) means zero or more lines
+Exit codes: 0 = pass, 1 = fail or error
 
-The re may optionally have starting and ending slashes, in which case it may be trailed with flags, exactly as in ECMAScript.
+## Architecture
 
+- **parser.js**: Parse test files (.t, .md, .cliscore)
+- **matcher.js**: Match output (literal, regex, glob, ellipsis, stderr)
+- **executor.js**: Run commands with output capture using unique markers
+- **runner.js**: Orchestrate execution, collect results
+- **cli.js**: CLI interface, glob expansion, parallel execution
 
-## Coming soon
+## Future
 
-A way to specify the execution environment in general, and with specific set up and tear town.
-
-Options for running in a Container, on a TTY, over ssh to a host, etc.
-
-The user and host options like prompt 'alice$'.
-
+- Container execution
+- TTY support
+- SSH/remote execution
+- ESC keyword for unprintable characters
