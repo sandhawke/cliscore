@@ -187,10 +187,27 @@ $ echo -n "no newline"
 no newline (no-eol)
 ```
 
+## Configuration
+
+Create `cliscore.json` in your project root for default settings:
+
+```json
+{
+  "allowedLanguages": ["cliscore", "shell-session", "bash"],
+  "jobs": 4,
+  "fast": false
+}
+```
+
+Priority: CLI arguments > cliscore.json > defaults
+
+See `cliscore.json.example` for all options.
+
 ## Options
 
 - `--json`: Output results as JSON
 - `--dry-run`: Parse tests without executing them
+- `--step`: Interactive mode - prompt before each command, show output after
 - `--jobs N`, `-j N`: Run N test files in parallel (default: 1)
 - `--fast`: Run tests in parallel with 8 jobs (equivalent to --jobs 8)
 - `--allow-lang <lang>`: Allow additional markdown language identifiers

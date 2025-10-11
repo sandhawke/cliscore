@@ -4,6 +4,7 @@ import { readdir, stat } from 'fs/promises';
 import { join, resolve } from 'path';
 import { parseTestFile } from './parser.js';
 import { runTestFiles, formatResults, getSummary } from './runner.js';
+import { loadConfig, mergeConfig } from './config.js';
 
 /**
  * Parse command-line arguments
@@ -220,7 +221,26 @@ function isTestFile(filename) {
  * Main entry point
  */
 async function main() {
-  const options = parseArgs(process.argv.slice(2));
+  // Load configuration file
+  let config = {};
+  try {
+    config = await loadConfig();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+
+  // Parse CLI arguments
+  const cliOptions = parseArgs(process.argv.slice(2));
+
+  // Merge config: defaults < cliscore.json < CLI args
+  const options = mergeConfig(config, cliOptions);
+
+  // Add non-config options from CLI
+  options.json = cliOptions.json;
+  options.dryRun = cliOptions.dryRun;
+  options.step = cliOptions.step;
+  options.files = cliOptions.files;
 
   if (options.files.length === 0) {
     console.error('Error: No test files specified');

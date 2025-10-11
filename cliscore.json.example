@@ -1,0 +1,10 @@
+{
+  "allowedLanguages": [
+    "cliscore",
+    "shell-session",
+    "bash",
+    "sh"
+  ],
+  "jobs": 4,
+  "fast": false
+}
