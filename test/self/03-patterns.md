@@ -15,6 +15,7 @@ The fixture tests regex, glob, and ellipsis:
 
 ```cliscore
 $ cliscore fixtures/patterns.md
+...
 ✓ All tests passed! (3/3)
 ```
 
@@ -23,20 +24,14 @@ $ cliscore fixtures/patterns.md
 Test bracketed syntax:
 
 ```cliscore
-$ cat > /tmp/enhanced-test.md << 'EOF'
-```cliscore
-$ echo "test123"
-[Matching: /test\d+/]
-
-$ echo "file.txt"
-[Matching glob: *.txt]
-
-$ echo "[literal]"
-[Literal text: "[literal]"]
-EOF
-```
-
-```cliscore
+$ echo '```cliscore' > /tmp/enhanced-test.md
+$ echo '$ echo "test123"' >> /tmp/enhanced-test.md
+$ echo '[Matching: /test\d+/]' >> /tmp/enhanced-test.md
+$ echo '$ echo "file.txt"' >> /tmp/enhanced-test.md
+$ echo '[Matching glob: *.txt]' >> /tmp/enhanced-test.md
+$ echo '$ echo "[literal]"' >> /tmp/enhanced-test.md
+$ echo '[Literal text: "[literal]"]' >> /tmp/enhanced-test.md
+$ echo '```' >> /tmp/enhanced-test.md
 $ cliscore /tmp/enhanced-test.md
 ✓ All tests passed! (3/3)
 ```

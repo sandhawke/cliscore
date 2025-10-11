@@ -34,14 +34,10 @@ $ cliscore --json --dry-run fixtures/basic.md | head -1
 ## Custom Language
 
 ```cliscore
-$ cat > /tmp/shell-session.md << 'EOF'
-```shell-session
-$ echo "custom lang"
-custom lang
-EOF
-```
-
-```cliscore
+$ echo '```shell-session' > /tmp/shell-session.md
+$ echo '$ echo "custom lang"' >> /tmp/shell-session.md
+$ echo 'custom lang' >> /tmp/shell-session.md
+$ echo '```' >> /tmp/shell-session.md
 $ cliscore --allow-lang shell-session /tmp/shell-session.md
 ✓ All tests passed! (1/1)
 ```
