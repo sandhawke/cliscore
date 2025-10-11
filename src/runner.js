@@ -46,6 +46,29 @@ export async function runTestFile(filePath, options = {}) {
     for (const test of testFile.tests) {
       const executionResult = await executor.execute(test);
 
+      // Handle skipped tests in step mode
+      if (executionResult.skipped) {
+        if (executionResult.success) {
+          result.passed++;
+          if (options.step) {
+            console.log('✓ Test marked as PASS (skipped)');
+          }
+        } else {
+          result.failed++;
+          result.failures.push({
+            command: test.command,
+            lineNumber: test.lineNumber,
+            error: executionResult.skipReason || 'Skipped by user',
+            actualOutput: executionResult.stdout,
+            actualStderr: executionResult.stderr
+          });
+          if (options.step) {
+            console.log('✗ Test marked as FAIL (skipped)');
+          }
+        }
+        continue;
+      }
+
       const matchResult = matchOutput(
         executionResult.stdout,
         executionResult.stderr,
@@ -54,6 +77,9 @@ export async function runTestFile(filePath, options = {}) {
 
       if (matchResult.success) {
         result.passed++;
+        if (options.step) {
+          console.log('✓ Test PASSED');
+        }
       } else {
         result.failed++;
         result.failures.push({
@@ -63,6 +89,11 @@ export async function runTestFile(filePath, options = {}) {
           actualOutput: executionResult.stdout,
           actualStderr: executionResult.stderr
         });
+        if (options.step) {
+          console.log('✗ Test FAILED');
+          console.log('\nFailure details:');
+          console.log(matchResult.error);
+        }
       }
     }
   } finally {

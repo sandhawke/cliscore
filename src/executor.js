@@ -15,6 +15,8 @@ import * as readline from 'readline';
  * @property {string[]} stderr - Standard error lines
  * @property {number} exitCode - Exit code of the command
  * @property {string} [error] - Error message if execution failed
+ * @property {boolean} [skipped] - Whether test was skipped in step mode
+ * @property {string} [skipReason] - Reason for skip
  */
 
 /**
@@ -45,13 +47,13 @@ export class Executor {
   }
 
   /**
-   * Prompt user for confirmation in step mode
+   * Prompt user for action in step mode
    * @param {string} command - The command to show
-   * @returns {Promise<boolean>}
+   * @returns {Promise<'run'|'pass'|'fail'>}
    */
   async promptStep(command) {
     if (!this.stepMode) {
-      return true;
+      return 'run';
     }
 
     if (!this.rl) {
@@ -67,12 +69,14 @@ export class Executor {
       : command;
 
     return new Promise((resolve) => {
-      this.rl.question(`\nAbout to run: ${commandPreview}\nContinue? [Y/n] `, (answer) => {
+      this.rl.question(`\nAbout to run: ${commandPreview}\nRun test / skip as Pass / skip as Fail? [R/p/f] `, (answer) => {
         const normalized = answer.trim().toLowerCase();
-        if (normalized === 'n' || normalized === 'no') {
-          resolve(false);
+        if (normalized === 'p' || normalized === 'pass') {
+          resolve('pass');
+        } else if (normalized === 'f' || normalized === 'fail') {
+          resolve('fail');
         } else {
-          resolve(true);
+          resolve('run');
         }
       });
     });
@@ -130,14 +134,25 @@ export class Executor {
 
     const { command } = testCommand;
 
-    // In step mode, ask for confirmation
-    const shouldRun = await this.promptStep(command);
-    if (!shouldRun) {
+    // In step mode, ask for action
+    const action = await this.promptStep(command);
+    if (action === 'pass') {
+      return {
+        success: true,
+        stdout: [],
+        stderr: [],
+        exitCode: 0,
+        skipped: true,
+        skipReason: 'Skipped as pass by user'
+      };
+    } else if (action === 'fail') {
       return {
         success: false,
         stdout: [],
-        stderr: ['Test skipped by user'],
-        exitCode: 0
+        stderr: [],
+        exitCode: 1,
+        skipped: true,
+        skipReason: 'Skipped as fail by user'
       };
     }
 
