@@ -239,13 +239,18 @@ Create `cliscore.json` in your project root for default settings:
 ```json
 {
   "allowedLanguages": ["cliscore", "console", "shellsession", "bash"],
-  "jobs": 4
+  "jobs": 4,
+  "shell": "/bin/bash"
 }
 ```
 
 Priority: CLI arguments > cliscore.json > defaults
 
-See `cliscore.json.example` for all options.
+Available options:
+- `allowedLanguages`: Array of markdown language identifiers to accept (default: `["cliscore"]`)
+- `jobs`: Number of test files to run in parallel (default: `1`)
+- `fast`: Enable fast mode with 8 parallel jobs (default: `false`)
+- `shell`: Shell to use for executing commands (default: `"/bin/sh"`)
 
 ## Options
 
@@ -259,6 +264,7 @@ See `cliscore.json.example` for all options.
 - `--jobs N`, `-j N`: Run N test files in parallel (default: 1)
 - `--fast`: Run tests in parallel with 8 jobs (equivalent to --jobs 8)
 - `--allow-lang <lang>`: Allow additional markdown language identifiers
+- `--shell <path>`: Shell to use for executing commands (default: /bin/sh)
 - `--help`, `-h`: Show help message
 
 ## Output Verbosity

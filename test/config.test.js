@@ -131,5 +131,29 @@ describe('Config', () => {
 
       assert.deepEqual(merged.allowedLanguages, ['cliscore']);
     });
+
+    it('should apply shell from config', () => {
+      const config = { shell: '/bin/bash' };
+      const merged = mergeConfig(config, { allowedLanguages: ['cliscore'] });
+
+      assert.equal(merged.shell, '/bin/bash');
+    });
+
+    it('should apply shell from CLI over config', () => {
+      const config = { shell: '/bin/bash' };
+      const cliOptions = {
+        allowedLanguages: ['cliscore'],
+        shell: '/bin/zsh'
+      };
+      const merged = mergeConfig(config, cliOptions);
+
+      assert.equal(merged.shell, '/bin/zsh');
+    });
+
+    it('should use default shell if not specified', () => {
+      const merged = mergeConfig({}, { allowedLanguages: ['cliscore'] });
+
+      assert.equal(merged.shell, '/bin/sh');
+    });
   });
 });

@@ -20,7 +20,8 @@ function parseArgs(args) {
     verbosity: 1, // 0=quiet, 1=normal, 2=verbose, 3=very verbose
     allowedLanguages: ['cliscore'],
     files: [],
-    jobs: 1
+    jobs: 1,
+    shell: undefined
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -57,6 +58,12 @@ function parseArgs(args) {
       options.jobs = jobs;
     } else if (arg === '--allow-lang' && i + 1 < args.length) {
       options.allowedLanguages.push(args[++i]);
+    } else if (arg === '--shell') {
+      if (i + 1 >= args.length) {
+        console.error('Error: --shell requires a path');
+        process.exit(1);
+      }
+      options.shell = args[++i];
     } else if (arg === '--help' || arg === '-h') {
       printHelp();
       process.exit(0);
@@ -93,6 +100,7 @@ Options:
   --jobs N, -j N      Run N test files in parallel (default: 1)
   --fast              Run tests in parallel with 8 jobs (equivalent to --jobs 8)
   --allow-lang <lang> Allow additional markdown language identifier (can be used multiple times)
+  --shell <path>      Shell to use for executing commands (default: /bin/sh)
   -h, --help          Show this help message
 
 Test Files:
@@ -350,6 +358,7 @@ async function main() {
       jobs: options.jobs,
       step: options.step,
       verbosity: options.verbosity,
+      shell: options.shell,
       // Stream output for quiet/default modes
       onFileComplete: (options.verbosity <= 1 && !options.json && !options.percent)
         ? (result) => {

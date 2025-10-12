@@ -37,7 +37,8 @@ export async function runTestFile(filePath, options = {}) {
 
   const testFile = await parseTestFile(filePath, allowedLanguages);
   const executor = new Executor({
-    step: options.step || false
+    step: options.step || false,
+    shell: options.shell
   });
 
   const result = {

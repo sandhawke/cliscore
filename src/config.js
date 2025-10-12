@@ -6,6 +6,7 @@ import { resolve } from 'path';
  * @property {string[]} [allowedLanguages] - Markdown language identifiers to accept
  * @property {number} [jobs] - Default number of parallel jobs
  * @property {boolean} [fast] - Default to fast mode
+ * @property {string} [shell] - Shell to use for executing commands (default: /bin/sh)
  */
 
 /**
@@ -65,6 +66,10 @@ function validateConfig(config) {
   if (config.fast !== undefined && typeof config.fast !== 'boolean') {
     throw new Error('fast must be a boolean');
   }
+
+  if (config.shell !== undefined && typeof config.shell !== 'string') {
+    throw new Error('shell must be a string');
+  }
 }
 
 /**
@@ -78,7 +83,8 @@ export function mergeConfig(config, cliOptions) {
   const defaults = {
     allowedLanguages: ['cliscore'],
     jobs: 1,
-    fast: false
+    fast: false,
+    shell: '/bin/sh'
   };
 
   // Start with defaults
@@ -95,6 +101,9 @@ export function mergeConfig(config, cliOptions) {
   if (config.fast) {
     merged.jobs = 8;
   }
+  if (config.shell !== undefined) {
+    merged.shell = config.shell;
+  }
 
   // Apply CLI options (these override everything)
   if (cliOptions.allowedLanguages && cliOptions.allowedLanguages.length > 1) {
@@ -104,6 +113,9 @@ export function mergeConfig(config, cliOptions) {
   if (cliOptions.jobs !== undefined && cliOptions.jobs !== 1) {
     // CLI specified jobs explicitly
     merged.jobs = cliOptions.jobs;
+  }
+  if (cliOptions.shell !== undefined) {
+    merged.shell = cliOptions.shell;
   }
 
   return merged;

@@ -25,6 +25,7 @@ import * as readline from 'readline';
 export class Executor {
   constructor(options = {}) {
     this.shell = null;
+    this.shellPath = options.shell || '/bin/sh';
     this.shellReady = false;
     this.setupScript = options.setupScript || null;
     this.stepMode = options.step || false;
@@ -93,7 +94,7 @@ export class Executor {
     }
 
     return new Promise((resolve, reject) => {
-      this.shell = spawn('/bin/sh', [], {
+      this.shell = spawn(this.shellPath, [], {
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
