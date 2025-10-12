@@ -198,8 +198,9 @@ custom
   });
 
   describe('error handling', () => {
-    it('should error on no files', async () => {
-      const result = await runCLI([]);
+    it('should error on no files found with explicit pattern', async () => {
+      // Use a pattern that won't match anything
+      const result = await runCLI(['/tmp/nonexistent-dir/**/*.md']);
 
       assert.equal(result.exitCode, 1);
       assert.match(result.stderr, /no test files/i);

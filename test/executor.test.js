@@ -144,7 +144,7 @@ describe('Executor', () => {
     await executor.start();
 
     const result = await executor.execute({
-      command: 'echo "test with $special & chars"',
+      command: 'echo "test with \\$special & chars"',
       expectedOutput: [],
       lineNumber: 1
     });

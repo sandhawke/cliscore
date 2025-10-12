@@ -52,10 +52,8 @@ goodbye
       const content = `\`\`\`cliscore
 $ echo "test1"
 test1
-
 $ echo "test2"
 test2
-
 $ echo "test3"
 wrong
 \`\`\`
@@ -193,7 +191,8 @@ expected
         }]
       }];
 
-      const output = formatResults(results);
+      // Use verbosity 2 to see detailed failure information
+      const output = formatResults(results, 2);
 
       assert.match(output, /test\.md/);
       assert.match(output, /Line 5/);
