@@ -213,10 +213,34 @@ See `cliscore.json.example` for all options.
 - `--json`: Output results as JSON
 - `--dry-run`: Parse tests without executing them
 - `--step`: Interactive mode - prompt before each command, show output after
+- `--percent`: Output only pass percentage (e.g., "95.5")
+- `-q`, `--quiet`: Quiet mode - one line per file with pass rate
+- `-v`, `--verbose`: Verbose mode - show all tests (one line per test)
+- `-vv`: Very verbose - show all tests with full error details
 - `--jobs N`, `-j N`: Run N test files in parallel (default: 1)
 - `--fast`: Run tests in parallel with 8 jobs (equivalent to --jobs 8)
 - `--allow-lang <lang>`: Allow additional markdown language identifiers
 - `--help`, `-h`: Show help message
+
+## Output Verbosity
+
+```bash
+# Quiet: one line per file
+cliscore -q tests/**/*.md
+# Output: ✓ test1.md: 100.0% (5/5)
+#         ✓ test2.md: 80.0% (4/5)
+#         ✗ 1 test failed, 9 passed
+
+# Normal: show only failures (default)
+cliscore tests/**/*.md
+
+# Verbose: one line per test
+cliscore -v tests/**/*.md
+# Shows: ✓ Line 5: echo "hello"
+
+# Very verbose: full error details
+cliscore -vv tests/**/*.md
+```
 
 ## Performance
 

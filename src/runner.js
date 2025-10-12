@@ -8,6 +8,7 @@ import { matchOutput } from './matcher.js';
  * @property {number} passed - Number of passed tests
  * @property {number} failed - Number of failed tests
  * @property {TestFailure[]} failures - Details of failed tests
+ * @property {TestPass[]} [passes] - Details of passed tests (for verbose mode)
  */
 
 /**
@@ -16,6 +17,12 @@ import { matchOutput } from './matcher.js';
  * @property {number} lineNumber - Line number in source file
  * @property {string} error - Error description
  * @property {string[]} [actualOutput] - Actual output received
+ */
+
+/**
+ * @typedef {Object} TestPass
+ * @property {string} command - The passed command
+ * @property {number} lineNumber - Line number in source file
  */
 
 /**
@@ -37,7 +44,8 @@ export async function runTestFile(filePath, options = {}) {
     file: filePath,
     passed: 0,
     failed: 0,
-    failures: []
+    failures: [],
+    passes: []
   };
 
   try {
@@ -77,6 +85,10 @@ export async function runTestFile(filePath, options = {}) {
 
       if (matchResult.success) {
         result.passed++;
+        result.passes.push({
+          command: test.command,
+          lineNumber: test.lineNumber
+        });
         if (options.step) {
           console.log('✓ Test PASSED');
         }
@@ -183,9 +195,10 @@ export async function runTestFiles(filePaths, options = {}) {
 /**
  * Format test results for display
  * @param {TestResult[]} results - Test results
+ * @param {number} verbosity - Verbosity level (0=quiet, 1=normal, 2=verbose, 3=very verbose)
  * @returns {string}
  */
-export function formatResults(results) {
+export function formatResults(results, verbosity = 1) {
   const output = [];
   let totalPassed = 0;
   let totalFailed = 0;
@@ -194,6 +207,42 @@ export function formatResults(results) {
     totalPassed += result.passed;
     totalFailed += result.failed;
 
+    const total = result.passed + result.failed;
+    const passRate = total > 0 ? ((result.passed / total) * 100).toFixed(1) : '0.0';
+
+    // Quiet mode: one line per file with percentage
+    if (verbosity === 0) {
+      const status = result.failed === 0 ? '✓' : '✗';
+      output.push(`${status} ${result.file}: ${passRate}% (${result.passed}/${total})`);
+      continue;
+    }
+
+    // Verbose mode: show all tests (passing and failing)
+    if (verbosity >= 2) {
+      output.push(`\n${result.file}:`);
+
+      // Show all passing tests
+      if (result.passes && result.passes.length > 0) {
+        for (const pass of result.passes) {
+          const cmdPreview = pass.command.split('\n')[0].substring(0, 60);
+          output.push(`  ✓ Line ${pass.lineNumber}: ${cmdPreview}`);
+        }
+      }
+
+      // Show all failing tests
+      if (result.failed > 0) {
+        for (const failure of result.failures) {
+          const cmdPreview = failure.command.split('\n')[0].substring(0, 60);
+          output.push(`  ✗ Line ${failure.lineNumber}: ${cmdPreview}`);
+          if (verbosity >= 3) {
+            output.push(`    ${failure.error}`);
+          }
+        }
+      }
+      continue;
+    }
+
+    // Normal mode: only show failures
     if (result.failed > 0) {
       output.push(`\n${result.file}:`);
 
@@ -212,16 +261,26 @@ export function formatResults(results) {
   }
 
   // Summary
-  output.push('');
-  output.push('═'.repeat(60));
-
   const total = totalPassed + totalFailed;
   const passRate = total > 0 ? ((totalPassed / total) * 100).toFixed(1) : '0.0';
 
-  if (totalFailed === 0) {
-    output.push(`✓ All tests passed! (${totalPassed}/${total})`);
+  if (verbosity === 0) {
+    // Quiet mode: just add summary line
+    if (totalFailed === 0) {
+      output.push(`✓ All tests passed! (${totalPassed}/${total})`);
+    } else {
+      output.push(`✗ ${totalFailed} test${totalFailed !== 1 ? 's' : ''} failed, ${totalPassed} passed (${passRate}% pass rate)`);
+    }
   } else {
-    output.push(`✗ ${totalFailed} test${totalFailed !== 1 ? 's' : ''} failed, ${totalPassed} passed (${passRate}% pass rate)`);
+    // Normal and verbose modes: add separator
+    output.push('');
+    output.push('═'.repeat(60));
+
+    if (totalFailed === 0) {
+      output.push(`✓ All tests passed! (${totalPassed}/${total})`);
+    } else {
+      output.push(`✗ ${totalFailed} test${totalFailed !== 1 ? 's' : ''} failed, ${totalPassed} passed (${passRate}% pass rate)`);
+    }
   }
 
   return output.join('\n');

@@ -17,6 +17,7 @@ function parseArgs(args) {
     dryRun: false,
     step: false,
     percent: false,
+    verbosity: 1, // 0=quiet, 1=normal, 2=verbose, 3=very verbose
     allowedLanguages: ['cliscore'],
     files: [],
     jobs: 1
@@ -33,6 +34,12 @@ function parseArgs(args) {
       options.step = true;
     } else if (arg === '--percent') {
       options.percent = true;
+    } else if (arg === '--quiet' || arg === '-q') {
+      options.verbosity = 0;
+    } else if (arg === '--verbose' || arg === '-v') {
+      options.verbosity = 2;
+    } else if (arg === '-vv') {
+      options.verbosity = 3;
     } else if (arg === '--fast') {
       options.jobs = 8;
     } else if (arg === '--jobs' || arg === '-j') {
@@ -76,6 +83,9 @@ Options:
   --dry-run           Parse tests but don't execute them
   --step              Interactive mode: prompt before each command, show output after
   --percent           Output only the pass percentage (e.g., "95.5")
+  -q, --quiet         Quiet: one line per file with pass rate
+  -v, --verbose       Verbose: show all tests (one line per test)
+  -vv                 Very verbose: show all tests with full error details
   --jobs N, -j N      Run N test files in parallel (default: 1)
   --fast              Run tests in parallel with 8 jobs (equivalent to --jobs 8)
   --allow-lang <lang> Allow additional markdown language identifier (can be used multiple times)
@@ -282,6 +292,7 @@ async function main() {
   options.dryRun = cliOptions.dryRun;
   options.step = cliOptions.step;
   options.percent = cliOptions.percent;
+  options.verbosity = cliOptions.verbosity;
   options.files = cliOptions.files;
 
   // Default pattern if no files specified
@@ -344,7 +355,7 @@ async function main() {
     } else if (options.json) {
       console.log(JSON.stringify({ summary, results }, null, 2));
     } else {
-      console.log(formatResults(results));
+      console.log(formatResults(results, options.verbosity));
     }
 
     // Exit with error code if any tests failed
