@@ -1,8 +1,34 @@
 # cliscore
 
-A test runner for command-line interfaces, extending the Mercurial unified test format (UTF).
+A test runner for command-line interfaces, optimized for easy reading. The hope is you will be able to review your AI test suites by hand. Also, with cliscore, AI can maybe generate better CLI tests.
 
-Vibe coded using Claude 4.5, but I put in quite a bit of design work and nudging. Honest.
+Vibe coded using Claude 4.5, but I put in a fair amount of work.
+
+Example:
+
+````markdown
+# My Test Suite
+
+```shell-session
+$ echo "hello world"
+hello world
+```
+
+```shell-session
+$ # by default we run in /bin/sh which doesn't have $RANDOM
+$ bash -c 'echo $RANDOM'
+[Matching: /\d+/]
+```
+
+```shell-session
+$ df
+Filesystem     1K-blocks      Used Available Use% Mounted on
+...
+[Matching: /^tmpfs\s*/]
+...
+```
+````
+
 
 ## Features
 
