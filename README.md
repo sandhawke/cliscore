@@ -224,23 +224,33 @@ See `cliscore.json.example` for all options.
 
 ## Output Verbosity
 
+Verbosity levels (streamed output for levels 0-1):
+
 ```bash
-# Quiet: one line per file
+# Quiet: only summary
 cliscore -q tests/**/*.md
+# Output: ✗ 1 test failed, 9 passed (90.0% pass rate)
+
+# Default: one line per file (streamed as files complete)
+cliscore tests/**/*.md
 # Output: ✓ test1.md: 100.0% (5/5)
 #         ✓ test2.md: 80.0% (4/5)
 #         ✗ 1 test failed, 9 passed
 
-# Normal: show only failures (default)
-cliscore tests/**/*.md
-
-# Verbose: one line per test
+# Verbose: show failures with details
 cliscore -v tests/**/*.md
-# Shows: ✓ Line 5: echo "hello"
+# Shows failure details for each failing test
 
-# Very verbose: full error details
+# Very verbose: one line per test
 cliscore -vv tests/**/*.md
+# Shows: ✓ Line 5: echo "hello"
+#        ✗ Line 12: failing command
+
+# Maximum: all tests with full error details
+cliscore -vvv tests/**/*.md
 ```
+
+Default mode streams results as files complete (great for parallel execution).
 
 ## Performance
 

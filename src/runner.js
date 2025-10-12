@@ -112,6 +112,11 @@ export async function runTestFile(filePath, options = {}) {
     executor.close();
   }
 
+  // Stream output for quiet/default modes if callback provided
+  if (options.onFileComplete && options.verbosity <= 1) {
+    options.onFileComplete(result);
+  }
+
   return result;
 }
 
@@ -195,10 +200,10 @@ export async function runTestFiles(filePaths, options = {}) {
 /**
  * Format test results for display
  * @param {TestResult[]} results - Test results
- * @param {number} verbosity - Verbosity level (0=quiet, 1=normal, 2=verbose, 3=very verbose)
+ * @param {number} verbosity - Verbosity level (0=quiet, 1=default, 2=verbose, 3=very verbose, 4=all details)
  * @returns {string}
  */
-export function formatResults(results, verbosity = 1) {
+export function formatResults(results, verbosity = 1, streamed = false) {
   const output = [];
   let totalPassed = 0;
   let totalFailed = 0;
@@ -210,15 +215,42 @@ export function formatResults(results, verbosity = 1) {
     const total = result.passed + result.failed;
     const passRate = total > 0 ? ((result.passed / total) * 100).toFixed(1) : '0.0';
 
-    // Quiet mode: one line per file with percentage
+    // Level 0 (quiet): nothing per file, just summary at end
     if (verbosity === 0) {
-      const status = result.failed === 0 ? '✓' : '✗';
-      output.push(`${status} ${result.file}: ${passRate}% (${result.passed}/${total})`);
       continue;
     }
 
-    // Verbose mode: show all tests (passing and failing)
-    if (verbosity >= 2) {
+    // Level 1 (default): one line per file with pass rate
+    // Skip if already streamed
+    if (verbosity === 1) {
+      if (!streamed) {
+        const status = result.failed === 0 ? '✓' : '✗';
+        output.push(`${status} ${result.file}: ${passRate}% (${result.passed}/${total})`);
+      }
+      continue;
+    }
+
+    // Level 2 (verbose): show failures with details
+    if (verbosity === 2) {
+      if (result.failed > 0) {
+        output.push(`\n${result.file}:`);
+        for (const failure of result.failures) {
+          output.push(`  ✗ Line ${failure.lineNumber}: ${failure.command}`);
+          output.push(`    ${failure.error}`);
+
+          if (failure.actualOutput && failure.actualOutput.length > 0) {
+            output.push(`    Actual output:`);
+            for (const line of failure.actualOutput) {
+              output.push(`      ${line}`);
+            }
+          }
+        }
+      }
+      continue;
+    }
+
+    // Level 3 (very verbose -vv): one line per test
+    if (verbosity === 3) {
       output.push(`\n${result.file}:`);
 
       // Show all passing tests
@@ -234,29 +266,38 @@ export function formatResults(results, verbosity = 1) {
         for (const failure of result.failures) {
           const cmdPreview = failure.command.split('\n')[0].substring(0, 60);
           output.push(`  ✗ Line ${failure.lineNumber}: ${cmdPreview}`);
-          if (verbosity >= 3) {
-            output.push(`    ${failure.error}`);
-          }
         }
       }
       continue;
     }
 
-    // Normal mode: only show failures
-    if (result.failed > 0) {
+    // Level 4 (very very verbose -vvv): all tests with full error details
+    if (verbosity >= 4) {
       output.push(`\n${result.file}:`);
 
-      for (const failure of result.failures) {
-        output.push(`  ✗ Line ${failure.lineNumber}: ${failure.command}`);
-        output.push(`    ${failure.error}`);
+      // Show all passing tests
+      if (result.passes && result.passes.length > 0) {
+        for (const pass of result.passes) {
+          const cmdPreview = pass.command.split('\n')[0].substring(0, 60);
+          output.push(`  ✓ Line ${pass.lineNumber}: ${cmdPreview}`);
+        }
+      }
 
-        if (failure.actualOutput && failure.actualOutput.length > 0) {
-          output.push(`    Actual output:`);
-          for (const line of failure.actualOutput) {
-            output.push(`      ${line}`);
+      // Show all failing tests with full details
+      if (result.failed > 0) {
+        for (const failure of result.failures) {
+          output.push(`  ✗ Line ${failure.lineNumber}: ${failure.command}`);
+          output.push(`    ${failure.error}`);
+
+          if (failure.actualOutput && failure.actualOutput.length > 0) {
+            output.push(`    Actual output:`);
+            for (const line of failure.actualOutput) {
+              output.push(`      ${line}`);
+            }
           }
         }
       }
+      continue;
     }
   }
 
@@ -264,15 +305,15 @@ export function formatResults(results, verbosity = 1) {
   const total = totalPassed + totalFailed;
   const passRate = total > 0 ? ((totalPassed / total) * 100).toFixed(1) : '0.0';
 
-  if (verbosity === 0) {
-    // Quiet mode: just add summary line
+  // Level 0-1: no separator, just summary
+  if (verbosity <= 1) {
     if (totalFailed === 0) {
       output.push(`✓ All tests passed! (${totalPassed}/${total})`);
     } else {
       output.push(`✗ ${totalFailed} test${totalFailed !== 1 ? 's' : ''} failed, ${totalPassed} passed (${passRate}% pass rate)`);
     }
   } else {
-    // Normal and verbose modes: add separator
+    // Level 2+: add separator before summary
     output.push('');
     output.push('═'.repeat(60));
 

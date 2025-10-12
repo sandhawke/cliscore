@@ -40,6 +40,8 @@ function parseArgs(args) {
       options.verbosity = 2;
     } else if (arg === '-vv') {
       options.verbosity = 3;
+    } else if (arg === '-vvv') {
+      options.verbosity = 4;
     } else if (arg === '--fast') {
       options.jobs = 8;
     } else if (arg === '--jobs' || arg === '-j') {
@@ -83,9 +85,11 @@ Options:
   --dry-run           Parse tests but don't execute them
   --step              Interactive mode: prompt before each command, show output after
   --percent           Output only the pass percentage (e.g., "95.5")
-  -q, --quiet         Quiet: one line per file with pass rate
-  -v, --verbose       Verbose: show all tests (one line per test)
-  -vv                 Very verbose: show all tests with full error details
+  -q, --quiet         Quiet: only summary line
+  (default)           One line per file with pass rate
+  -v, --verbose       Show failures with details
+  -vv                 Show all tests (one line per test)
+  -vvv                Show all tests with full error details
   --jobs N, -j N      Run N test files in parallel (default: 1)
   --fast              Run tests in parallel with 8 jobs (equivalent to --jobs 8)
   --allow-lang <lang> Allow additional markdown language identifier (can be used multiple times)
@@ -344,7 +348,22 @@ async function main() {
     const results = await runTestFiles(testFiles, {
       allowedLanguages: options.allowedLanguages,
       jobs: options.jobs,
-      step: options.step
+      step: options.step,
+      verbosity: options.verbosity,
+      // Stream output for quiet/default modes
+      onFileComplete: (options.verbosity <= 1 && !options.json && !options.percent)
+        ? (result) => {
+            const total = result.passed + result.failed;
+            const passRate = total > 0 ? ((result.passed / total) * 100).toFixed(1) : '0.0';
+
+            if (options.verbosity === 1) {
+              // Default: one line per file
+              const status = result.failed === 0 ? '✓' : '✗';
+              console.log(`${status} ${result.file}: ${passRate}% (${result.passed}/${total})`);
+            }
+            // Quiet mode (0): print nothing per file
+          }
+        : null
     });
 
     const summary = getSummary(results);
@@ -355,7 +374,8 @@ async function main() {
     } else if (options.json) {
       console.log(JSON.stringify({ summary, results }, null, 2));
     } else {
-      console.log(formatResults(results, options.verbosity));
+      const wasStreamed = options.verbosity <= 1;
+      console.log(formatResults(results, options.verbosity, wasStreamed));
     }
 
     // Exit with error code if any tests failed
