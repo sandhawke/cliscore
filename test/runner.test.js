@@ -192,7 +192,8 @@ expected
         passes: []
       }];
 
-      const output = formatResults(results, 2); // Use verbose mode
+      // Use verbosity 2 to see detailed failure information
+      const output = formatResults(results, 2);
 
       assert.match(output, /test\.md/);
       assert.match(output, /Line 5/);
