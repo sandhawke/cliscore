@@ -1,8 +1,10 @@
-# cliscore
+# cliscore - easy-to-read CLI tests!
 
-A test runner for command-line interfaces, optimized for easy reading. The hope is you will be able to review your AI test suites by hand. Also, with cliscore, AI can maybe generate better CLI tests.
+A test runner for command-line interfaces, optimized for easy reading. Rhymes with "high score". The hope is you will be able to review your AI test suites by hand, and confirm it's doing approximately what you want.
 
-Vibe coded using Claude 4.5, but I put in a fair amount of work.
+Also, with cliscore, AIs can maybe generate better black-box tests for AIs.
+
+Vibe coded using Claude 4.5, but I put in a fair amount of design work, I swear.
 
 Example [hello-world.md](test/fixtures/hello-world.md)
 
