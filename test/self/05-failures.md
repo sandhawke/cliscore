@@ -35,10 +35,10 @@ $ cliscore fixtures/basic.md fixtures/failing.md
 
 ## Error Details
 
-Failures should show expected vs actual:
+Failures should show expected vs actual (with -v for details):
 
 ```cliscore
-$ cliscore fixtures/failing.md 2>&1
+$ cliscore -v fixtures/failing.md 2>&1
 ...
 [Matching: /Expected:/]
 ...
