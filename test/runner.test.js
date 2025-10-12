@@ -52,10 +52,8 @@ goodbye
       const content = `\`\`\`cliscore
 $ echo "test1"
 test1
-
 $ echo "test2"
 test2
-
 $ echo "test3"
 wrong
 \`\`\`
@@ -190,10 +188,11 @@ expected
           lineNumber: 5,
           error: 'Output mismatch',
           actualOutput: ['wrong']
-        }]
+        }],
+        passes: []
       }];
 
-      const output = formatResults(results);
+      const output = formatResults(results, 2); // Use verbose mode
 
       assert.match(output, /test\.md/);
       assert.match(output, /Line 5/);
