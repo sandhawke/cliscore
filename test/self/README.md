@@ -25,29 +25,35 @@ This way:
 
 ### Running Self-Tests
 
-From the project root:
+**Important**: Always run from `test/self/` directory:
 
 ```bash
-# Run with the dev version testing itself
 cd test/self
+
+# Run all self-tests
 ../../src/cliscore *.md
 
-# Or use any installed cliscore to test the dev version
-cd test/self
+# Or with any installed cliscore
 cliscore *.md
 
 # Run specific tests
-cd test/self
 cliscore 01-basic.md 03-patterns.md
 
 # Fast parallel execution
-cd test/self
 cliscore --fast *.md
+
+# Just the percentage
+cliscore --percent *.md
 ```
 
-**Important**: Always run from `test/self/` directory so:
-1. `cliscore.sh` is found and loaded
+**Why run from test/self/?**
+1. `cliscore.sh` is found and loaded (sets up PATH)
 2. Relative paths to `fixtures/` work correctly
+3. Avoids running documentation .md files in project root
+
+**Note**: The default pattern `**/*.md` from project root will include
+documentation files and test fixtures. Always run self-tests with
+explicit `*.md` from the `test/self/` directory.
 
 ## Test Structure
 

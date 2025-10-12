@@ -163,7 +163,8 @@ function shouldIgnoreDirectory(dirname) {
     '.next',
     '.nuxt',
     'out',
-    'vendor'
+    'vendor',
+    'fixtures'
   ];
   return ignoreDirs.includes(dirname) || dirname.startsWith('.');
 }
