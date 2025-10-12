@@ -2,6 +2,8 @@
 
 A test runner for command-line interfaces, extending the Mercurial unified test format (UTF).
 
+Vibe coded using Claude 4.5, but I put in quite a bit of design work and nudging. Honest.
+
 ## Features
 
 - **Multiple file formats**: Supports `.t` (UTF), `.md` (markdown), and `.cliscore` files
@@ -19,7 +21,7 @@ A test runner for command-line interfaces, extending the Mercurial unified test 
 ## Installation
 
 ```bash
-npm install
+npm install cliscore
 ```
 
 ## Usage
@@ -30,20 +32,23 @@ npm install
 # Run all tests (default: **/*.{t,md,cliscore})
 cliscore
 
-# Run a single test file
-cliscore tests/basic.t
+# Run a single test file, single-step mode
+cliscore tests/basic.t --step
 
-# Run multiple files with glob patterns
-cliscore tests/**/*.md
+# Run multiple files with glob patterns, highly verbose
+cliscore tests/**/*.md -vv
 
 # Dry run (parse without executing)
 cliscore --dry-run tests/example.md
 
 # JSON output
-cliscore --json tests/**/*.t
+cliscore --json
+
+# Just the pass-percentage output, parallel runs
+cliscore --percent --fast
 
 # Allow additional markdown language identifiers
-cliscore --allow-lang shell-session tests/**/*.md
+cliscore --allow-lang shell-session
 ```
 
 By default, cliscore recursively finds all `.t`, `.md`, and `.cliscore` files, automatically ignoring `node_modules/`, `.git/`, and other common directories.
@@ -84,6 +89,8 @@ hello world
 ```
 ````
 
+If you can be sure all your markdown files with type "shell-session" code blocks are safe to run, then we recommend using that and adding it to your cliscore.json file. Then you should get nice syntax highlighting. Otherwise, just stick to cliscore code blocks or .cliscore files.
+
 ### Extended Format (.cliscore files)
 
 Accepts both UTF and markdown formats. Supports enhanced prompts:
@@ -102,7 +109,7 @@ In markdown code blocks, tests are separated by command prompts (`$` or `#`), no
 
 - **Empty lines in output are preserved** and must match exactly
 - **Blank lines between commands** are treated as part of the expected output
-- To separate commands visually without expecting blank output, place them on consecutive lines
+- To separate commands visually, put them in separate code blocks or use comments
 
 Example:
 ```cliscore
@@ -110,11 +117,12 @@ $ printf "line1\n\nline3"
 line1
 
 line3
+$ # ---
 $ echo "next command"
 next command
 ```
 
-The first command expects three lines of output (including the blank line). The second command starts immediately after.
+The first command expects three lines of output (including the blank line).
 
 ## Output Matching
 
@@ -199,8 +207,7 @@ Create `cliscore.json` in your project root for default settings:
 ```json
 {
   "allowedLanguages": ["cliscore", "shell-session", "bash"],
-  "jobs": 4,
-  "fast": false
+  "jobs": 4
 }
 ```
 
@@ -294,13 +301,7 @@ test_helper() {
 
 The file is sourced automatically if present. Setup/teardown functions are invisible (don't appear in test output), but helper functions can be called explicitly in tests.
 
-## Architecture
-
-- **parser.js**: Parses test files into structured test commands
-- **matcher.js**: Matches actual output against expected patterns
-- **executor.js**: Executes commands in a shell with output capture
-- **runner.js**: Orchestrates test execution and collects results
-- **cli.js**: Command-line interface
+See test/self for an example of this being used to change the path, so one version of cliscore can test another.
 
 ## Exit Codes
 
