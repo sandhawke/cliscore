@@ -1,8 +1,8 @@
-# cliscore - easy-to-read CLI tests!
+# cliscore - Easy-to-read CLI tests!
 
-A test runner for command-line interfaces, optimized for easy reading. Rhymes with "high score". The hope is you will be able to review your AI test suites by hand, and confirm it's doing approximately what you want.
+A test runner for command-line interfaces, optimized for easy reading. Rhymes with "high score". The hope is you will be able to manually review the test suite guiding your AI coder.
 
-Also, with cliscore, AIs can maybe generate better black-box tests for AIs.
+Also, with cliscore, AIs can maybe generate better black-box tests for themselves.
 
 Vibe coded using Claude 4.5, but I put in a fair amount of design work, I swear.
 
@@ -121,7 +121,7 @@ hello world
 ```
 ````
 
-If you can be sure all your markdown files with type "shell-session" code blocks are safe to run, then we recommend using that and adding it to your cliscore.json file. Then you should get nice syntax highlighting. Otherwise, just stick to cliscore code blocks or .cliscore files.
+If you can be sure all your markdown files with type "console" code blocks are safe to run, then we recommend using that (or whatever gives you good syntax highlighting in your environment) and adding it to your cliscore.json file. Otherwise, just stick to cliscore code blocks or .cliscore files.
 
 ### Extended Format (.cliscore files)
 
@@ -238,7 +238,7 @@ Create `cliscore.json` in your project root for default settings:
 
 ```json
 {
-  "allowedLanguages": ["cliscore", "shell-session", "bash"],
+  "allowedLanguages": ["cliscore", "console", "shellsession", "bash"],
   "jobs": 4
 }
 ```
