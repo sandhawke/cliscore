@@ -4,23 +4,22 @@ A test runner for command-line interfaces, optimized for easy reading. The hope 
 
 Vibe coded using Claude 4.5, but I put in a fair amount of work.
 
-Example:
+Example [hello-world.md](test/fixtures/hello-world.md)
 
 ````markdown
 # My Test Suite
 
-```shell-session
+```console
 $ echo "hello world"
 hello world
 ```
 
-```shell-session
-$ # by default we run in /bin/sh which doesn't have $RANDOM
-$ bash -c 'echo $RANDOM'
+```console
+$ echo $$
 [Matching: /\d+/]
 ```
 
-```shell-session
+```console
 $ df
 Filesystem     1K-blocks      Used Available Use% Mounted on
 ...
@@ -29,6 +28,11 @@ Filesystem     1K-blocks      Used Available Use% Mounted on
 ```
 ````
 
+```console
+$ cliscore hello-world.md
+✓ /home/sandro/src/cliscore/test/fixtures/hello-world.md: 100.0% (3/3)
+✓ All tests passed! (3/3)
+```
 
 ## Features
 

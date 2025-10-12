@@ -1,13 +1,12 @@
 # My Test Suite
 
-```bash
+```console
 $ echo "hello world"
 hello world
 ```
 
-```shell
-$ # by default we run in /bin/sh which doesn't have $RANDOM
-$ bash -c 'echo $RANDOM'
+```console
+$ echo $$
 [Matching: /\d+/]
 ```
 
