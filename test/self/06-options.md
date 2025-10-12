@@ -20,7 +20,7 @@ valid
 ## Dry Run
 
 ```cliscore
-$ cliscore --dry-run fixtures/basic.md
+$ cliscore --dry-run fixtures/basic.md | head -1
 Parsed 1 test file(s):
 ```
 

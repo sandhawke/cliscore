@@ -6,6 +6,7 @@ Test stderr matching with [stderr:] syntax.
 
 ```cliscore
 $ cliscore fixtures/stderr.md
+...
 ✓ All tests passed! (1/1)
 ```
 

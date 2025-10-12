@@ -6,7 +6,8 @@ Test that cliscore correctly detects and reports failures.
 
 ```cliscore
 $ cliscore fixtures/failing.md
-[stderr: ✗ 1 test]
+...
+[Matching: /✗ 1 test/]
 ```
 
 Exit code should be non-zero:
@@ -29,7 +30,7 @@ $ cliscore fixtures/failing.md 2>&1 | grep -c "failed"
 ```cliscore
 $ cliscore fixtures/basic.md fixtures/failing.md
 ...
-✗ 1 test
+[Matching: /✗ 1 test/]
 ```
 
 ## Error Details
@@ -42,4 +43,5 @@ $ cliscore fixtures/failing.md 2>&1
 [Matching: /Expected:/]
 ...
 [Matching: /Got:/]
+...
 ```

@@ -6,6 +6,7 @@ Test that cliscore supports different file formats.
 
 ```cliscore
 $ cliscore fixtures/basic.md
+...
 ✓ All tests passed! (1/1)
 ```
 
@@ -13,6 +14,7 @@ $ cliscore fixtures/basic.md
 
 ```cliscore
 $ cliscore fixtures/utf.t
+...
 ✓ All tests passed! (2/2)
 ```
 

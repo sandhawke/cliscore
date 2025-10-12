@@ -263,8 +263,16 @@ export class Executor {
       this.shell.stderr.on('data', stderrHandler);
 
       // Execute the command followed by marker echoes
-      // Wrap in a subshell to prevent exit commands from killing the main shell
-      const fullCommand = `(${command})
+      // Only wrap in subshell if command contains 'exit' to avoid killing main shell
+      // but preserve environment for other commands
+      const needsSubshell = /\bexit\b/.test(command);
+      const fullCommand = needsSubshell
+        ? `(${command})
+__EXIT_CODE=$?
+echo "${stdoutEndMarker}:$__EXIT_CODE"
+echo "${stderrEndMarker}" >&2
+`
+        : `${command}
 __EXIT_CODE=$?
 echo "${stdoutEndMarker}:$__EXIT_CODE"
 echo "${stderrEndMarker}" >&2
