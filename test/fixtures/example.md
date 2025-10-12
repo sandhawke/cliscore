@@ -7,7 +7,6 @@ This is an example test suite demonstrating cliscore's markdown format.
 ```cliscore
 $ echo "Hello from markdown"
 Hello from markdown
-
 $ pwd
 [Matching: /.*]
 ```
@@ -41,7 +40,6 @@ last
 
 ```cliscore
 $ export MY_VAR="test value"
-
 $ echo $MY_VAR
 test value
 ```
@@ -51,7 +49,6 @@ test value
 ```cliscore
 alice$ echo "user prompt"
 user prompt
-
 alice@server$ echo "user@host prompt"
 user@host prompt
 ```
