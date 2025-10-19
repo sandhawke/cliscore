@@ -14,6 +14,7 @@ import * as readline from 'readline';
  * @property {string[]} stdout - Standard output lines
  * @property {string[]} stderr - Standard error lines
  * @property {number} exitCode - Exit code of the command
+ * @property {number} durationMs - Execution duration in milliseconds
  * @property {string} [error] - Error message if execution failed
  * @property {boolean} [skipped] - Whether test was skipped in step mode
  * @property {string} [skipReason] - Reason for skip
@@ -30,6 +31,8 @@ export class Executor {
     this.setupScript = options.setupScript || null;
     this.stepMode = options.step || false;
     this.rl = null;
+    this.timeout = options.timeout || 30; // Timeout in seconds
+    this.shellDead = false; // Flag indicating shell was killed
   }
 
   /**
@@ -111,8 +114,8 @@ export class Executor {
       // Source the setup script if it exists
       if (this.setupScript) {
         this.shell.stdin.write(this.setupScript + '\n');
-        // Call cliscore_setup if defined
-        this.shell.stdin.write('type cliscore_setup >/dev/null 2>&1 && cliscore_setup\n');
+        // Call before_each_file if defined
+        this.shell.stdin.write('type before_each_file >/dev/null 2>&1 && before_each_file\n');
       }
 
       // Wait a bit for shell to be ready
@@ -129,11 +132,22 @@ export class Executor {
    * @returns {Promise<ExecutionResult>}
    */
   async execute(testCommand) {
-    if (!this.shell || !this.shellReady) {
+    if (!this.shell || !this.shellReady || this.shellDead) {
+      if (this.shellDead) {
+        return {
+          success: false,
+          stdout: [],
+          stderr: [],
+          exitCode: -1,
+          durationMs: 0,
+          error: 'Shell died due to previous timeout or error'
+        };
+      }
       throw new Error('Executor not started. Call start() first.');
     }
 
     const { command } = testCommand;
+    const startTime = Date.now();
 
     // In step mode, ask for action
     const action = await this.promptStep(command);
@@ -143,6 +157,7 @@ export class Executor {
         stdout: [],
         stderr: [],
         exitCode: 0,
+        durationMs: Date.now() - startTime,
         skipped: true,
         skipReason: 'Skipped as pass by user'
       };
@@ -152,12 +167,15 @@ export class Executor {
         stdout: [],
         stderr: [],
         exitCode: 1,
+        durationMs: Date.now() - startTime,
         skipped: true,
         skipReason: 'Skipped as fail by user'
       };
     }
 
     const marker = this.generateMarker();
+    let timeoutHandle = null;
+    let timedOut = false;
 
     return new Promise((resolve) => {
       const stdoutLines = [];
@@ -172,13 +190,57 @@ export class Executor {
       let stdoutComplete = false;
       let stderrComplete = false;
 
+      // Set up timeout
+      timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        this.shellDead = true;
+
+        // Remove listeners to prevent further processing
+        if (this.shell && this.shell.stdout) {
+          this.shell.stdout.removeAllListeners('data');
+        }
+        if (this.shell && this.shell.stderr) {
+          this.shell.stderr.removeAllListeners('data');
+        }
+
+        // Kill the shell
+        if (this.shell) {
+          this.shell.kill('SIGTERM');
+          setTimeout(() => {
+            if (this.shell && !this.shell.killed) {
+              this.shell.kill('SIGKILL');
+            }
+          }, 1000);
+        }
+
+        resolve({
+          success: false,
+          stdout: stdoutLines,
+          stderr: stderrLines,
+          exitCode: -1,
+          durationMs: Date.now() - startTime,
+          error: `Timeout after ${this.timeout}s`
+        });
+      }, this.timeout * 1000);
+
       const checkComplete = () => {
         if (stdoutComplete && stderrComplete) {
+          // Clear timeout if we completed normally
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
+
+          // If we already timed out, don't resolve again
+          if (timedOut) {
+            return;
+          }
+
           const result = {
             success: exitCode === 0,
             stdout: stdoutLines,
             stderr: stderrLines,
-            exitCode: exitCode ?? 0
+            exitCode: exitCode ?? 0,
+            durationMs: Date.now() - startTime
           };
 
           // In step mode, show the output
@@ -307,10 +369,10 @@ echo "${stderrEndMarker}" >&2
     }
 
     if (this.shell) {
-      // Call cliscore_teardown if defined
+      // Call after_each_file if defined
       if (this.setupScript) {
         try {
-          this.shell.stdin.write('type cliscore_teardown >/dev/null 2>&1 && cliscore_teardown\n');
+          this.shell.stdin.write('type after_each_file >/dev/null 2>&1 && after_each_file\n');
         } catch {
           // Ignore errors during teardown
         }

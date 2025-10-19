@@ -4,7 +4,7 @@ Test that cliscore handles command exit codes correctly.
 
 ## Success Exit Code
 
-```cliscore
+```console
 $ cliscore fixtures/basic.md && echo "success"
 ...
 success
@@ -12,7 +12,7 @@ success
 
 ## Failure Exit Code
 
-```cliscore
+```console
 $ cliscore fixtures/failing.md || echo "failed as expected"
 ...
 failed as expected
@@ -20,14 +20,14 @@ failed as expected
 
 ## Commands Can Have Non-Zero Exit Codes
 
-```cliscore
+```console
 $ false || echo "caught: $?"
 caught: 1
 ```
 
 ## Environment Persists
 
-```cliscore
+```console
 $ export TEST_VAR=value
 $ echo $TEST_VAR
 value

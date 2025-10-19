@@ -81,7 +81,7 @@ function validateConfig(config) {
  */
 export function mergeConfig(config, cliOptions) {
   const defaults = {
-    allowedLanguages: ['cliscore'],
+    allowedLanguages: ['console', 'cliscore'],
     jobs: 1,
     fast: false,
     shell: '/bin/sh'

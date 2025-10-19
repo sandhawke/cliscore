@@ -110,24 +110,24 @@ Classic UTF format with two-space indentation:
 
 ### Markdown Format (.md files)
 
-Tests in fenced code blocks (default language identifier: `cliscore`):
+Tests in fenced code blocks (default language identifiers: `console` and `cliscore`):
 
 ````markdown
 # My Test Suite
 
-```cliscore
+```console
 $ echo "hello world"
 hello world
 ```
 ````
 
-If you can be sure all your markdown files with type "console" code blocks are safe to run, then we recommend using that (or whatever gives you good syntax highlighting in your environment) and adding it to your cliscore.json file. Otherwise, just stick to cliscore code blocks or .cliscore files.
+We recommend using `console` as it provides good syntax highlighting in most editors and is widely recognized. The `cliscore` identifier is also supported for backward compatibility.
 
 ### Extended Format (.cliscore files)
 
 Accepts both UTF and markdown formats. Supports enhanced prompts:
 
-```cliscore
+```console
 alice$ echo "user prompt"
 user prompt
 
@@ -144,7 +144,7 @@ In markdown code blocks, tests are separated by command prompts (`$` or `#`), no
 - To separate commands visually, put them in separate code blocks or use comments
 
 Example:
-```cliscore
+```console
 $ printf "line1\n\nline3"
 line1
 
@@ -160,7 +160,7 @@ The first command expects three lines of output (including the blank line).
 
 ### Literal Matching
 
-```cliscore
+```console
 $ echo "exact text"
 exact text
 ```
@@ -168,13 +168,13 @@ exact text
 ### Regular Expressions
 
 UTF style:
-```cliscore
+```console
 $ echo "test123"
 test\d+ (re)
 ```
 
 Enhanced syntax:
-```cliscore
+```console
 $ echo "test123"
 [Matching: /test\d+/]
 ```
@@ -182,20 +182,20 @@ $ echo "test123"
 ### Glob Patterns
 
 UTF style:
-```cliscore
+```console
 $ ls
 file*.txt (glob)
 ```
 
 Enhanced syntax:
-```cliscore
+```console
 $ ls
 [Matching glob: file*.txt]
 ```
 
 ### Ellipsis (Zero or More Lines)
 
-```cliscore
+```console
 $ cat long-file.txt
 first line
 ...
@@ -206,14 +206,14 @@ last line
 
 Match stderr output using `[stderr:]` syntax:
 
-```cliscore
+```console
 $ echo "output" && echo "error" >&2
 output
 [stderr: error]
 ```
 
 Multiple stderr lines:
-```cliscore
+```console
 $ command-with-errors
 normal output
 [stderr: error line 1]
@@ -222,7 +222,7 @@ normal output
 
 ### Special Cases
 
-```cliscore
+```console
 # Literal square brackets
 $ echo "[something]"
 [Literal text: "[something]"]
@@ -247,7 +247,7 @@ Create `cliscore.json` in your project root for default settings:
 Priority: CLI arguments > cliscore.json > defaults
 
 Available options:
-- `allowedLanguages`: Array of markdown language identifiers to accept (default: `["cliscore"]`)
+- `allowedLanguages`: Array of markdown language identifiers to accept (default: `["console", "cliscore"]`)
 - `jobs`: Number of test files to run in parallel (default: `1`)
 - `fast`: Enable fast mode with 8 parallel jobs (default: `false`)
 - `shell`: Shell to use for executing commands (default: `"/bin/sh"`)
@@ -319,14 +319,14 @@ Create a `cliscore.sh` file in your project root to define setup and teardown fu
 #!/bin/sh
 
 # Called once at the start of each test shell
-cliscore_setup() {
+before_each_file() {
     export TEST_VAR="value"
     export PATH="/custom/path:$PATH"
     # mkdir -p /tmp/test-workspace
 }
 
 # Called once before the shell exits
-cliscore_teardown() {
+after_each_file() {
     # rm -rf /tmp/test-workspace
     true
 }

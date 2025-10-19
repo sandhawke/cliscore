@@ -4,7 +4,7 @@ Test different prompt styles (user@host).
 
 ## User Prompts
 
-```cliscore
+```console
 alice$ echo "user"
 user
 bob$ echo "another"
@@ -13,7 +13,7 @@ another
 
 ## User@Host Prompts
 
-```cliscore
+```console
 alice@server$ echo "remote"
 remote
 bob@localhost$ echo "local"
@@ -22,7 +22,7 @@ local
 
 ## Mixed Prompts
 
-```cliscore
+```console
 $ echo "standard"
 standard
 alice$ echo "user"

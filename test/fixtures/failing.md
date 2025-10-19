@@ -2,7 +2,7 @@
 
 These tests are designed to fail, for testing error reporting.
 
-```cliscore
+```console
 $ echo "actual output"
 expected output
 

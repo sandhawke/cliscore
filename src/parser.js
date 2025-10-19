@@ -28,7 +28,7 @@ import { basename } from 'path';
  * @param {string[]} allowedLanguages - Additional language identifiers for markdown code blocks
  * @returns {Promise<TestFile>}
  */
-export async function parseTestFile(filePath, allowedLanguages = ['cliscore']) {
+export async function parseTestFile(filePath, allowedLanguages = ['console', 'cliscore']) {
   const content = await readFile(filePath, 'utf-8');
   const ext = filePath.split('.').pop();
 

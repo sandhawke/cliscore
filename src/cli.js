@@ -18,10 +18,12 @@ function parseArgs(args) {
     step: false,
     percent: false,
     verbosity: 1, // 0=quiet, 1=normal, 2=verbose, 3=very verbose
-    allowedLanguages: ['cliscore'],
+    allowedLanguages: ['console', 'cliscore'],
     files: [],
     jobs: 1,
-    shell: undefined
+    shell: undefined,
+    show: 1, // Number of failures to show in detail (default: 1)
+    timeout: 30 // Timeout in seconds per test (default: 30)
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -64,6 +66,33 @@ function parseArgs(args) {
         process.exit(1);
       }
       options.shell = args[++i];
+    } else if (arg === '--show') {
+      if (i + 1 >= args.length) {
+        console.error('Error: --show requires a number or "all"');
+        process.exit(1);
+      }
+      const value = args[++i];
+      if (value === 'all' || value === '-1') {
+        options.show = -1;
+      } else {
+        const num = parseInt(value, 10);
+        if (isNaN(num) || num < 0) {
+          console.error('Error: --show must be a non-negative number or "all"');
+          process.exit(1);
+        }
+        options.show = num;
+      }
+    } else if (arg === '--timeout') {
+      if (i + 1 >= args.length) {
+        console.error('Error: --timeout requires a number (seconds)');
+        process.exit(1);
+      }
+      const timeout = parseInt(args[++i], 10);
+      if (isNaN(timeout) || timeout < 1) {
+        console.error('Error: --timeout must be a positive number');
+        process.exit(1);
+      }
+      options.timeout = timeout;
     } else if (arg === '--help' || arg === '-h') {
       printHelp();
       process.exit(0);
@@ -101,6 +130,8 @@ Options:
   --fast              Run tests in parallel with 8 jobs (equivalent to --jobs 8)
   --allow-lang <lang> Allow additional markdown language identifier (can be used multiple times)
   --shell <path>      Shell to use for executing commands (default: /bin/sh)
+  --show N            Show details for first N failures (default: 1, use "all" or -1 for all)
+  --timeout N         Timeout in seconds per test (default: 30)
   -h, --help          Show this help message
 
 Test Files:
@@ -306,6 +337,8 @@ async function main() {
   options.percent = cliOptions.percent;
   options.verbosity = cliOptions.verbosity;
   options.files = cliOptions.files;
+  options.show = cliOptions.show;
+  options.timeout = cliOptions.timeout;
 
   // Default pattern if no files specified
   if (options.files.length === 0) {
@@ -359,6 +392,7 @@ async function main() {
       step: options.step,
       verbosity: options.verbosity,
       shell: options.shell,
+      timeout: options.timeout,
       // Stream output for quiet/default modes
       onFileComplete: (options.verbosity <= 1 && !options.json && !options.percent)
         ? (result) => {
@@ -384,7 +418,7 @@ async function main() {
       console.log(JSON.stringify({ summary, results }, null, 2));
     } else {
       const wasStreamed = options.verbosity <= 1;
-      console.log(formatResults(results, options.verbosity, wasStreamed));
+      console.log(formatResults(results, options.verbosity, wasStreamed, options.show));
     }
 
     // Exit with error code if any tests failed

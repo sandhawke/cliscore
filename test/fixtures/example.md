@@ -4,7 +4,7 @@ This is an example test suite demonstrating cliscore's markdown format.
 
 ## Basic Commands
 
-```cliscore
+```console
 $ echo "Hello from markdown"
 Hello from markdown
 $ pwd
@@ -15,21 +15,21 @@ $ pwd
 
 ### Regular Expressions
 
-```cliscore
+```console
 $ echo "Error: File not found"
 [Matching: /Error: .* not found/]
 ```
 
 ### Glob Patterns
 
-```cliscore
+```console
 $ echo "data.json"
 [Matching glob: *.json]
 ```
 
 ## Ellipsis
 
-```cliscore
+```console
 $ printf "first\nmiddle1\nmiddle2\nlast"
 first
 ...
@@ -38,7 +38,7 @@ last
 
 ## Environment Variables
 
-```cliscore
+```console
 $ export MY_VAR="test value"
 $ echo $MY_VAR
 test value
@@ -46,7 +46,7 @@ test value
 
 ## User Prompts
 
-```cliscore
+```console
 alice$ echo "user prompt"
 user prompt
 alice@server$ echo "user@host prompt"
@@ -55,7 +55,7 @@ user@host prompt
 
 ## Multiple Line Commands
 
-```cliscore
+```console
 $ echo "line1" && \
 > echo "line2" && \
 > echo "line3"

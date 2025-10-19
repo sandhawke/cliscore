@@ -17,12 +17,14 @@ import { matchOutput } from './matcher.js';
  * @property {number} lineNumber - Line number in source file
  * @property {string} error - Error description
  * @property {string[]} [actualOutput] - Actual output received
+ * @property {number} durationMs - Execution duration in milliseconds
  */
 
 /**
  * @typedef {Object} TestPass
  * @property {string} command - The passed command
  * @property {number} lineNumber - Line number in source file
+ * @property {number} durationMs - Execution duration in milliseconds
  */
 
 /**
@@ -33,12 +35,13 @@ import { matchOutput } from './matcher.js';
  * @returns {Promise<TestResult>}
  */
 export async function runTestFile(filePath, options = {}) {
-  const allowedLanguages = options.allowedLanguages || ['cliscore'];
+  const allowedLanguages = options.allowedLanguages || ['console', 'cliscore'];
 
   const testFile = await parseTestFile(filePath, allowedLanguages);
   const executor = new Executor({
     step: options.step || false,
-    shell: options.shell
+    shell: options.shell,
+    timeout: options.timeout || 30
   });
 
   const result = {
@@ -55,6 +58,25 @@ export async function runTestFile(filePath, options = {}) {
     for (const test of testFile.tests) {
       const executionResult = await executor.execute(test);
 
+      // If there was an execution error (timeout or shell death), mark as failed
+      if (executionResult.error) {
+        result.failed++;
+        result.failures.push({
+          command: test.command,
+          lineNumber: test.lineNumber,
+          error: executionResult.error,
+          actualOutput: executionResult.stdout || [],
+          actualStderr: executionResult.stderr || [],
+          durationMs: executionResult.durationMs
+        });
+
+        // If shell died, remaining tests will also fail
+        if (executionResult.error.includes('Shell died') || executionResult.error.includes('Timeout')) {
+          // Continue to process remaining tests - they will all get "Shell died" errors
+        }
+        continue;
+      }
+
       // Handle skipped tests in step mode
       if (executionResult.skipped) {
         if (executionResult.success) {
@@ -69,7 +91,8 @@ export async function runTestFile(filePath, options = {}) {
             lineNumber: test.lineNumber,
             error: executionResult.skipReason || 'Skipped by user',
             actualOutput: executionResult.stdout,
-            actualStderr: executionResult.stderr
+            actualStderr: executionResult.stderr,
+            durationMs: executionResult.durationMs
           });
           if (options.step) {
             console.log('✗ Test marked as FAIL (skipped)');
@@ -88,7 +111,8 @@ export async function runTestFile(filePath, options = {}) {
         result.passed++;
         result.passes.push({
           command: test.command,
-          lineNumber: test.lineNumber
+          lineNumber: test.lineNumber,
+          durationMs: executionResult.durationMs
         });
         if (options.step) {
           console.log('✓ Test PASSED');
@@ -100,7 +124,8 @@ export async function runTestFile(filePath, options = {}) {
           lineNumber: test.lineNumber,
           error: matchResult.error || 'Unknown error',
           actualOutput: executionResult.stdout,
-          actualStderr: executionResult.stderr
+          actualStderr: executionResult.stderr,
+          durationMs: executionResult.durationMs
         });
         if (options.step) {
           console.log('✗ Test FAILED');
@@ -202,16 +227,29 @@ export async function runTestFiles(filePaths, options = {}) {
  * Format test results for display
  * @param {TestResult[]} results - Test results
  * @param {number} verbosity - Verbosity level (0=quiet, 1=default, 2=verbose, 3=very verbose, 4=all details)
+ * @param {boolean} streamed - Whether results were already streamed
+ * @param {number} showFailures - Number of failures to show in detail (-1 = all, default: 1)
  * @returns {string}
  */
-export function formatResults(results, verbosity = 1, streamed = false) {
+export function formatResults(results, verbosity = 1, streamed = false, showFailures = 1) {
   const output = [];
   let totalPassed = 0;
   let totalFailed = 0;
+  const allFailures = [];
 
   for (const result of results) {
     totalPassed += result.passed;
     totalFailed += result.failed;
+
+    // Collect all failures for later display
+    if (result.failures && result.failures.length > 0) {
+      for (const failure of result.failures) {
+        allFailures.push({
+          file: result.file,
+          ...failure
+        });
+      }
+    }
 
     const total = result.passed + result.failed;
     const passRate = total > 0 ? ((result.passed / total) * 100).toFixed(1) : '0.0';
@@ -236,7 +274,8 @@ export function formatResults(results, verbosity = 1, streamed = false) {
       if (result.failed > 0) {
         output.push(`\n${result.file}:`);
         for (const failure of result.failures) {
-          output.push(`  ✗ Line ${failure.lineNumber}: ${failure.command}`);
+          const duration = formatDuration(failure.durationMs);
+          output.push(`  ✗ Line ${failure.lineNumber}: ${failure.command} (${duration})`);
           output.push(`    ${failure.error}`);
 
           if (failure.actualOutput && failure.actualOutput.length > 0) {
@@ -258,7 +297,8 @@ export function formatResults(results, verbosity = 1, streamed = false) {
       if (result.passes && result.passes.length > 0) {
         for (const pass of result.passes) {
           const cmdPreview = pass.command.split('\n')[0].substring(0, 60);
-          output.push(`  ✓ Line ${pass.lineNumber}: ${cmdPreview}`);
+          const duration = formatDuration(pass.durationMs);
+          output.push(`  ✓ Line ${pass.lineNumber}: ${cmdPreview} (${duration})`);
         }
       }
 
@@ -266,7 +306,8 @@ export function formatResults(results, verbosity = 1, streamed = false) {
       if (result.failed > 0) {
         for (const failure of result.failures) {
           const cmdPreview = failure.command.split('\n')[0].substring(0, 60);
-          output.push(`  ✗ Line ${failure.lineNumber}: ${cmdPreview}`);
+          const duration = formatDuration(failure.durationMs);
+          output.push(`  ✗ Line ${failure.lineNumber}: ${cmdPreview} (${duration})`);
         }
       }
       continue;
@@ -280,14 +321,16 @@ export function formatResults(results, verbosity = 1, streamed = false) {
       if (result.passes && result.passes.length > 0) {
         for (const pass of result.passes) {
           const cmdPreview = pass.command.split('\n')[0].substring(0, 60);
-          output.push(`  ✓ Line ${pass.lineNumber}: ${cmdPreview}`);
+          const duration = formatDuration(pass.durationMs);
+          output.push(`  ✓ Line ${pass.lineNumber}: ${cmdPreview} (${duration})`);
         }
       }
 
       // Show all failing tests with full details
       if (result.failed > 0) {
         for (const failure of result.failures) {
-          output.push(`  ✗ Line ${failure.lineNumber}: ${failure.command}`);
+          const duration = formatDuration(failure.durationMs);
+          output.push(`  ✗ Line ${failure.lineNumber}: ${failure.command} (${duration})`);
           output.push(`    ${failure.error}`);
 
           if (failure.actualOutput && failure.actualOutput.length > 0) {
@@ -299,6 +342,40 @@ export function formatResults(results, verbosity = 1, streamed = false) {
         }
       }
       continue;
+    }
+  }
+
+  // Show failure details for verbosity 0-1 (default mode)
+  if (verbosity <= 1 && allFailures.length > 0 && showFailures !== 0) {
+    const failuresToShow = showFailures === -1 ? allFailures : allFailures.slice(0, showFailures);
+
+    output.push('');
+    if (showFailures === -1 || allFailures.length <= showFailures) {
+      output.push(`Showing all ${allFailures.length} failure${allFailures.length !== 1 ? 's' : ''}:`);
+    } else {
+      output.push(`Showing first ${showFailures} of ${allFailures.length} failures:`);
+    }
+    output.push('');
+
+    for (const failure of failuresToShow) {
+      output.push(`${failure.file}:${failure.lineNumber}`);
+      const cmdPreview = failure.command.length > 80
+        ? failure.command.substring(0, 80) + '...'
+        : failure.command;
+      output.push(`  $ ${cmdPreview}`);
+      output.push(`  ${failure.error}`);
+
+      if (failure.actualOutput && failure.actualOutput.length > 0) {
+        const preview = failure.actualOutput.slice(0, 5);
+        output.push(`  Actual output:`);
+        for (const line of preview) {
+          output.push(`    ${line}`);
+        }
+        if (failure.actualOutput.length > 5) {
+          output.push(`    ... (${failure.actualOutput.length - 5} more lines)`);
+        }
+      }
+      output.push('');
     }
   }
 
@@ -326,6 +403,23 @@ export function formatResults(results, verbosity = 1, streamed = false) {
   }
 
   return output.join('\n');
+}
+
+/**
+ * Format duration in milliseconds to human-readable string
+ * @param {number} ms - Duration in milliseconds
+ * @returns {string}
+ */
+function formatDuration(ms) {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  } else if (ms < 60000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  } else {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = ((ms % 60000) / 1000).toFixed(1);
+    return `${minutes}m${seconds}s`;
+  }
 }
 
 /**
