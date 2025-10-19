@@ -87,6 +87,60 @@ export class Executor {
   }
 
   /**
+   * Execute a shell script in a separate shell and capture output
+   * @param {string} script - Script content to execute
+   * @returns {Promise<{stdout: string[], stderr: string[], exitCode: number, durationMs: number}>}
+   */
+  async executeInSeparateShell(script) {
+    const startTime = Date.now();
+
+    return new Promise((resolve, reject) => {
+      const shell = spawn(this.shellPath, [], {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      const stdoutLines = [];
+      const stderrLines = [];
+      let exitCode = null;
+
+      shell.stdout.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        // Remove empty last line if present
+        if (lines[lines.length - 1] === '') {
+          lines.pop();
+        }
+        stdoutLines.push(...lines);
+      });
+
+      shell.stderr.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        if (lines[lines.length - 1] === '') {
+          lines.pop();
+        }
+        stderrLines.push(...lines);
+      });
+
+      shell.on('exit', (code) => {
+        exitCode = code ?? 0;
+        resolve({
+          stdout: stdoutLines,
+          stderr: stderrLines,
+          exitCode,
+          durationMs: Date.now() - startTime
+        });
+      });
+
+      shell.on('error', (err) => {
+        reject(new Error(`Failed to execute script: ${err.message}`));
+      });
+
+      // Write script and close stdin
+      shell.stdin.write(script + '\n');
+      shell.stdin.end();
+    });
+  }
+
+  /**
    * Start the shell process
    * @returns {Promise<void>}
    */

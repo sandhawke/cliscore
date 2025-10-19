@@ -318,28 +318,39 @@ Create a `cliscore.sh` file in your project root to define setup and teardown fu
 ```bash
 #!/bin/sh
 
-# Called once at the start of each test shell
+# Optional: Runs before tests start (separate shell)
+run_first() {
+    mkdir -p /tmp/test-workspace
+    echo "Created test workspace"
+}
+
+# Runs once at the start of each test shell
 before_each_file() {
     export TEST_VAR="value"
     export PATH="/custom/path:$PATH"
-    # mkdir -p /tmp/test-workspace
 }
 
-# Called once before the shell exits
+# Runs once before the test shell exits (if shell is alive)
 after_each_file() {
-    # rm -rf /tmp/test-workspace
-    true
+    # Non-critical cleanup
+    unset TEST_VAR
 }
 
-# Define helper functions for tests to use
+# Optional: Runs after all tests (separate shell, always executes)
+run_last() {
+    rm -rf /tmp/test-workspace
+    echo "Cleanup complete"
+}
+
+# Helper functions are available to tests
 test_helper() {
     echo "Helper: $1"
 }
 ```
 
-The file is sourced automatically if present. Setup/teardown functions are invisible (don't appear in test output), but helper functions can be called explicitly in tests.
+**Important**: `after_each_file()` won't run if the shell crashes or times out. Use `run_last()` for critical cleanup that must always happen.
 
-See test/self for an example of this being used to change the path, so one version of cliscore can test another.
+See [SETUP.md](SETUP.md) for detailed documentation on the lifecycle and when to use each function.
 
 ## Exit Codes
 

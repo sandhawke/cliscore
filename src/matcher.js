@@ -98,9 +98,22 @@ export function matchOutput(stdout, stderr, expectations) {
   }
 
   if (unmatchedLines.length > 0) {
+    // Generate helpful suggestion showing what to add
+    const suggestions = [];
+    for (let i = actualIndex; i < Math.min(actualIndex + 3, combinedOutput.length); i++) {
+      const line = combinedOutput[i].line;
+      if (combinedOutput[i].stream === 'stderr') {
+        suggestions.push(`[stderr: ${line}]`);
+      } else {
+        suggestions.push(line);
+      }
+    }
+
+    const more = combinedOutput.length - actualIndex > 3 ? `\n  ... (${combinedOutput.length - actualIndex - 3} more lines)` : '';
+
     return {
       success: false,
-      error: `Unexpected extra output:\n  ${unmatchedLines.join('\n  ')}`
+      error: `Unexpected extra output:\n  ${unmatchedLines.slice(0, 3).join('\n  ')}${more}\n\nHint: Add these lines to your test:\n  ${suggestions.join('\n  ')}`
     };
   }
 
@@ -120,9 +133,22 @@ function matchSingleLine(actualLine, expectation) {
       if (actualLine === expectation.pattern) {
         return { success: true };
       }
+
+      // Provide helpful suggestions for common mistakes
+      let suggestion = '';
+      if (actualLine.includes(expectation.pattern)) {
+        suggestion = ' (expected text appears but with extra characters)';
+      } else if (expectation.pattern.includes(actualLine)) {
+        suggestion = ' (actual output is a subset of expected)';
+      } else if (actualLine.toLowerCase() === expectation.pattern.toLowerCase()) {
+        suggestion = ' (case mismatch - actual is different case)';
+      } else if (actualLine.trim() === expectation.pattern.trim()) {
+        suggestion = ' (whitespace mismatch - try checking leading/trailing spaces)';
+      }
+
       return {
         success: false,
-        error: `Literal mismatch`
+        error: `Literal mismatch${suggestion}`
       };
 
     case 'regex': {
@@ -131,9 +157,20 @@ function matchSingleLine(actualLine, expectation) {
         if (regex.test(actualLine)) {
           return { success: true };
         }
+
+        // Provide suggestion for regex issues
+        let suggestion = '';
+        if (!expectation.flags || !expectation.flags.includes('i')) {
+          // Test if case-insensitive would work
+          const caseInsensitiveRegex = new RegExp(expectation.pattern, (expectation.flags || '') + 'i');
+          if (caseInsensitiveRegex.test(actualLine)) {
+            suggestion = ' (hint: would match with case-insensitive flag /i)';
+          }
+        }
+
         return {
           success: false,
-          error: `Regex did not match`
+          error: `Regex did not match: /${expectation.pattern}/${expectation.flags || ''}${suggestion}`
         };
       } catch (err) {
         return {

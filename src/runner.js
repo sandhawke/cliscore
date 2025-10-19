@@ -9,6 +9,8 @@ import { matchOutput } from './matcher.js';
  * @property {number} failed - Number of failed tests
  * @property {TestFailure[]} failures - Details of failed tests
  * @property {TestPass[]} [passes] - Details of passed tests (for verbose mode)
+ * @property {Object} [runFirst] - Output from run_first function
+ * @property {Object} [runLast] - Output from run_last function
  */
 
 /**
@@ -53,6 +55,26 @@ export async function runTestFile(filePath, options = {}) {
   };
 
   try {
+    // Execute run_first if defined
+    if (executor.setupScript) {
+      const runFirstScript = executor.setupScript + '\ntype run_first >/dev/null 2>&1 && run_first';
+      try {
+        const runFirstResult = await executor.executeInSeparateShell(runFirstScript);
+        result.runFirst = runFirstResult;
+
+        // If run_first fails with non-zero exit, report warning but continue
+        if (runFirstResult.exitCode !== 0) {
+          if (options.verbosity >= 2) {
+            console.warn(`Warning: run_first exited with code ${runFirstResult.exitCode}`);
+          }
+        }
+      } catch (err) {
+        if (options.verbosity >= 2) {
+          console.warn(`Warning: run_first failed: ${err.message}`);
+        }
+      }
+    }
+
     await executor.start();
 
     for (const test of testFile.tests) {
@@ -136,6 +158,26 @@ export async function runTestFile(filePath, options = {}) {
     }
   } finally {
     executor.close();
+
+    // Execute run_last if defined (always runs, even if shell crashed)
+    if (executor.setupScript) {
+      const runLastScript = executor.setupScript + '\ntype run_last >/dev/null 2>&1 && run_last';
+      try {
+        const runLastResult = await executor.executeInSeparateShell(runLastScript);
+        result.runLast = runLastResult;
+
+        // If run_last fails with non-zero exit, report warning
+        if (runLastResult.exitCode !== 0) {
+          if (options.verbosity >= 2) {
+            console.warn(`Warning: run_last exited with code ${runLastResult.exitCode}`);
+          }
+        }
+      } catch (err) {
+        if (options.verbosity >= 2) {
+          console.warn(`Warning: run_last failed: ${err.message}`);
+        }
+      }
+    }
   }
 
   // Stream output for quiet/default modes if callback provided
@@ -271,8 +313,20 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
 
     // Level 2 (verbose): show failures with details
     if (verbosity === 2) {
-      if (result.failed > 0) {
+      if (result.failed > 0 || result.runFirst || result.runLast) {
         output.push(`\n${result.file}:`);
+
+        // Show run_first timing if present
+        if (result.runFirst) {
+          const duration = formatDuration(result.runFirst.durationMs);
+          const status = result.runFirst.exitCode === 0 ? '✓' : '✗';
+          output.push(`  ${status} run_first() (${duration})`);
+          if (result.runFirst.exitCode !== 0) {
+            output.push(`    Exit code: ${result.runFirst.exitCode}`);
+          }
+        }
+
+        // Show failures
         for (const failure of result.failures) {
           const duration = formatDuration(failure.durationMs);
           output.push(`  ✗ Line ${failure.lineNumber}: ${failure.command} (${duration})`);
@@ -285,6 +339,16 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
             }
           }
         }
+
+        // Show run_last timing if present
+        if (result.runLast) {
+          const duration = formatDuration(result.runLast.durationMs);
+          const status = result.runLast.exitCode === 0 ? '✓' : '✗';
+          output.push(`  ${status} run_last() (${duration})`);
+          if (result.runLast.exitCode !== 0) {
+            output.push(`    Exit code: ${result.runLast.exitCode}`);
+          }
+        }
       }
       continue;
     }
@@ -292,6 +356,13 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
     // Level 3 (very verbose -vv): one line per test
     if (verbosity === 3) {
       output.push(`\n${result.file}:`);
+
+      // Show run_first timing if present
+      if (result.runFirst) {
+        const duration = formatDuration(result.runFirst.durationMs);
+        const status = result.runFirst.exitCode === 0 ? '✓' : '✗';
+        output.push(`  ${status} run_first() (${duration})`);
+      }
 
       // Show all passing tests
       if (result.passes && result.passes.length > 0) {
@@ -310,12 +381,32 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
           output.push(`  ✗ Line ${failure.lineNumber}: ${cmdPreview} (${duration})`);
         }
       }
+
+      // Show run_last timing if present
+      if (result.runLast) {
+        const duration = formatDuration(result.runLast.durationMs);
+        const status = result.runLast.exitCode === 0 ? '✓' : '✗';
+        output.push(`  ${status} run_last() (${duration})`);
+      }
       continue;
     }
 
     // Level 4 (very very verbose -vvv): all tests with full error details
     if (verbosity >= 4) {
       output.push(`\n${result.file}:`);
+
+      // Show run_first timing and output if present
+      if (result.runFirst) {
+        const duration = formatDuration(result.runFirst.durationMs);
+        const status = result.runFirst.exitCode === 0 ? '✓' : '✗';
+        output.push(`  ${status} run_first() (${duration})`);
+        if (result.runFirst.stdout && result.runFirst.stdout.length > 0) {
+          output.push(`    Output:`);
+          for (const line of result.runFirst.stdout) {
+            output.push(`      ${line}`);
+          }
+        }
+      }
 
       // Show all passing tests
       if (result.passes && result.passes.length > 0) {
@@ -338,6 +429,19 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
             for (const line of failure.actualOutput) {
               output.push(`      ${line}`);
             }
+          }
+        }
+      }
+
+      // Show run_last timing and output if present
+      if (result.runLast) {
+        const duration = formatDuration(result.runLast.durationMs);
+        const status = result.runLast.exitCode === 0 ? '✓' : '✗';
+        output.push(`  ${status} run_last() (${duration})`);
+        if (result.runLast.stdout && result.runLast.stdout.length > 0) {
+          output.push(`    Output:`);
+          for (const line of result.runLast.stdout) {
+            output.push(`      ${line}`);
           }
         }
       }
@@ -364,6 +468,13 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
         : failure.command;
       output.push(`  $ ${cmdPreview}`);
       output.push(`  ${failure.error}`);
+
+      // Add helpful hints for common errors
+      if (failure.error.includes('Timeout')) {
+        output.push(`  Hint: Increase timeout with --timeout N (current: default)`);
+      } else if (failure.error.includes('Shell died')) {
+        output.push(`  Hint: Previous test timed out or crashed, killing the shell`);
+      }
 
       if (failure.actualOutput && failure.actualOutput.length > 0) {
         const preview = failure.actualOutput.slice(0, 5);
