@@ -110,11 +110,11 @@ Two-space indent for commands (`  $ `) and output (`  `).
 Optional file in project root:
 
 ```sh
-cliscore_setup() {
+before_each_file() {
     export MY_VAR="value"
 }
 
-cliscore_teardown() {
+after_each_file() {
     # cleanup
 }
 
