@@ -211,14 +211,29 @@ function parseCodeBlock(content, startLine) {
  */
 function parseInlinePatterns(line) {
   // Check for inline patterns like: text [Matching: /regex/] more text
-  const inlineRegex = /\[Matching:\s*\/([^\/]+)\/([gimsuvy]*)\]/g;
-  const inlineGlobRegex = /\[Matching glob:\s*([^\]]+)\]/g;
+  // BUT: if the entire line is just [Matching: ...], it should be treated as bracketed syntax
+  const inlineRegex = /\[Matching:\s*\/([^\/]+)\/([gimsuvy]*)\]/;
+  const inlineGlobRegex = /\[Matching glob:\s*([^\]]+)\]/;
 
   // Check if line contains inline patterns
-  if (inlineRegex.test(line) || inlineGlobRegex.test(line)) {
-    // Reset regex state
-    inlineRegex.lastIndex = 0;
-    inlineGlobRegex.lastIndex = 0;
+  const hasInlineRegex = inlineRegex.test(line);
+  const hasInlineGlob = inlineGlobRegex.test(line);
+
+  if (hasInlineRegex || hasInlineGlob) {
+    // Only treat as inline if there's text before or after the pattern
+    // If the entire line is just [Matching: ...], let it fall through to bracketed syntax
+    const trimmed = line.trim();
+    if (trimmed.startsWith('[Matching:') || trimmed.startsWith('[Matching glob:')) {
+      // Check if entire line is just the pattern
+      if (hasInlineRegex) {
+        const match = trimmed.match(/^\[Matching:\s*\/[^\/]+\/[gimsuvy]*\]$/);
+        if (match) return null; // Let bracketed syntax handle it
+      }
+      if (hasInlineGlob) {
+        const match = trimmed.match(/^\[Matching glob:\s*[^\]]+\]$/);
+        if (match) return null; // Let bracketed syntax handle it
+      }
+    }
 
     return {
       type: 'inline',
