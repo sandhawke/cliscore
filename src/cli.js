@@ -7,6 +7,23 @@ import { runTestFiles, formatResults, getSummary } from './runner.js';
 import { loadConfig, mergeConfig } from './config.js';
 
 /**
+ * Format duration in milliseconds to human-readable string
+ * @param {number} ms - Duration in milliseconds
+ * @returns {string}
+ */
+function formatDuration(ms) {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  } else if (ms < 60000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  } else {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = ((ms % 60000) / 1000).toFixed(1);
+    return `${minutes}m${seconds}s`;
+  }
+}
+
+/**
  * Parse command-line arguments
  * @param {string[]} args - Command-line arguments
  * @returns {Object}
@@ -23,7 +40,10 @@ function parseArgs(args) {
     jobs: 1,
     shell: undefined,
     show: 1, // Number of failures to show in detail (default: 1)
-    timeout: 30 // Timeout in seconds per test (default: 30)
+    timeout: 30, // Timeout in seconds per test (default: 30)
+    debug: false, // Debug mode: show test summaries
+    trace: false, // Trace mode: show all I/O events
+    progress: false // Progress mode: show real-time progress
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -93,6 +113,13 @@ function parseArgs(args) {
         process.exit(1);
       }
       options.timeout = timeout;
+    } else if (arg === '--debug') {
+      options.debug = true;
+    } else if (arg === '--trace') {
+      options.trace = true;
+      options.debug = true; // trace implies debug
+    } else if (arg === '--progress') {
+      options.progress = true;
     } else if (arg === '--help' || arg === '-h') {
       printHelp();
       process.exit(0);
@@ -132,6 +159,9 @@ Options:
   --shell <path>      Shell to use for executing commands (default: /bin/sh)
   --show N            Show details for first N failures (default: 1, use "all" or -1 for all)
   --timeout N         Timeout in seconds per test (default: 30)
+  --debug             Debug mode: show summary of what happened with each test
+  --trace             Trace mode: show all I/O events (read/write to shell)
+  --progress          Show real-time progress as files complete
   -h, --help          Show this help message
 
 Test Files:
@@ -339,6 +369,9 @@ async function main() {
   options.files = cliOptions.files;
   options.show = cliOptions.show;
   options.timeout = cliOptions.timeout;
+  options.debug = cliOptions.debug;
+  options.trace = cliOptions.trace;
+  options.progress = cliOptions.progress;
 
   // Default pattern if no files specified
   if (options.files.length === 0) {
@@ -393,16 +426,25 @@ async function main() {
       verbosity: options.verbosity,
       shell: options.shell,
       timeout: options.timeout,
-      // Stream output for quiet/default modes
-      onFileComplete: (options.verbosity <= 1 && !options.json && !options.percent)
-        ? (result) => {
-            const total = result.passed + result.failed;
-            const passRate = total > 0 ? ((result.passed / total) * 100).toFixed(1) : '0.0';
+      debug: options.debug,
+      trace: options.trace,
+      progress: options.progress,
+      totalFiles: testFiles.length,
+      // Stream output for quiet/default modes (but not debug/trace)
+      onFileComplete: (options.verbosity <= 1 && !options.json && !options.percent && !options.debug && !options.trace)
+        ? (result, index, total, duration) => {
+            const testTotal = result.passed + result.failed;
+            const passRate = testTotal > 0 ? ((result.passed / testTotal) * 100).toFixed(1) : '0.0';
 
-            if (options.verbosity === 1) {
+            if (options.progress) {
+              // Progress mode: [N/total] file (duration) status
+              const status = result.failed === 0 ? '✓' : '✗';
+              const durationStr = duration ? ` (${formatDuration(duration)})` : '';
+              console.log(`[${index + 1}/${total}] ${result.file}${durationStr} ${status}`);
+            } else if (options.verbosity === 1) {
               // Default: one line per file
               const status = result.failed === 0 ? '✓' : '✗';
-              console.log(`${status} ${result.file}: ${passRate}% (${result.passed}/${total})`);
+              console.log(`${status} ${result.file}: ${passRate}% (${result.passed}/${testTotal})`);
             }
             // Quiet mode (0): print nothing per file
           }
@@ -417,8 +459,8 @@ async function main() {
     } else if (options.json) {
       console.log(JSON.stringify({ summary, results }, null, 2));
     } else {
-      const wasStreamed = options.verbosity <= 1;
-      console.log(formatResults(results, options.verbosity, wasStreamed, options.show));
+      const wasStreamed = options.verbosity <= 1 && !options.debug && !options.trace;
+      console.log(formatResults(results, options.verbosity, wasStreamed, options.show, options.debug));
     }
 
     // Exit with error code if any tests failed

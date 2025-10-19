@@ -10,10 +10,12 @@ import { basename } from 'path';
 
 /**
  * @typedef {Object} OutputExpectation
- * @property {'literal'|'regex'|'glob'|'ellipsis'|'no-eol'|'stderr'} type
+ * @property {'literal'|'regex'|'glob'|'ellipsis'|'no-eol'|'stderr'|'skip'|'inline'} type
  * @property {string} [pattern] - Pattern to match (not used for ellipsis)
  * @property {string} [flags] - Regex flags (for regex type)
  * @property {'stdout'|'stderr'} [stream] - Which stream to match (defaults to stdout)
+ * @property {string} [reason] - Skip reason (for skip type)
+ * @property {Array} [patterns] - Array of inline patterns (for inline type)
  */
 
 /**
@@ -203,6 +205,32 @@ function parseCodeBlock(content, startLine) {
 }
 
 /**
+ * Parse inline patterns in a line
+ * @param {string} line - Line with potential inline patterns
+ * @returns {OutputExpectation|null} - Parsed expectation or null if no inline patterns
+ */
+function parseInlinePatterns(line) {
+  // Check for inline patterns like: text [Matching: /regex/] more text
+  const inlineRegex = /\[Matching:\s*\/([^\/]+)\/([gimsuvy]*)\]/g;
+  const inlineGlobRegex = /\[Matching glob:\s*([^\]]+)\]/g;
+
+  // Check if line contains inline patterns
+  if (inlineRegex.test(line) || inlineGlobRegex.test(line)) {
+    // Reset regex state
+    inlineRegex.lastIndex = 0;
+    inlineGlobRegex.lastIndex = 0;
+
+    return {
+      type: 'inline',
+      pattern: line,
+      isInline: true
+    };
+  }
+
+  return null;
+}
+
+/**
  * Parse output expectations from lines of expected output
  * @param {string[]} lines - Output lines
  * @returns {OutputExpectation[]}
@@ -211,6 +239,12 @@ function parseOutputExpectations(lines) {
   const expectations = [];
 
   for (let line of lines) {
+    // Check for inline patterns first
+    const inlinePattern = parseInlinePatterns(line);
+    if (inlinePattern) {
+      expectations.push(inlinePattern);
+      continue;
+    }
     // Check for UTF format suffixes
     if (line.endsWith(' (re)')) {
       const pattern = line.slice(0, -5);
@@ -233,7 +267,10 @@ function parseOutputExpectations(lines) {
     else if (line.startsWith('[') && line.endsWith(']')) {
       const inside = line.slice(1, -1);
 
-      if (inside.startsWith('stderr:')) {
+      if (inside.startsWith('SKIP:')) {
+        const reason = inside.slice(5).trim();
+        expectations.push({ type: 'skip', reason });
+      } else if (inside.startsWith('stderr:')) {
         const pattern = inside.slice(7).trim();
         expectations.push({ type: 'literal', pattern, stream: 'stderr' });
       } else if (inside.startsWith('Literal text: ')) {

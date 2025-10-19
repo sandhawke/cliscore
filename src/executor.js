@@ -33,6 +33,25 @@ export class Executor {
     this.rl = null;
     this.timeout = options.timeout || 30; // Timeout in seconds
     this.shellDead = false; // Flag indicating shell was killed
+    this.trace = options.trace || false; // Trace mode for I/O logging
+  }
+
+  /**
+   * Log trace message with timestamp
+   * @param {string} type - Event type
+   * @param {string} message - Message to log
+   */
+  traceLog(type, message) {
+    if (!this.trace) return;
+
+    const timestamp = new Date().toISOString().substring(11, 23); // HH:MM:SS.mmm
+    const prefix = `[TRACE ${timestamp}]`;
+    const lines = message.split('\n');
+
+    console.error(`${prefix} ${type}:`);
+    for (const line of lines) {
+      console.error(`  ${line}`);
+    }
   }
 
   /**
@@ -150,16 +169,20 @@ export class Executor {
       this.setupScript = await this.loadSetupScript();
     }
 
+    this.traceLog('SPAWN', `Starting shell: ${this.shellPath}`);
+
     return new Promise((resolve, reject) => {
       this.shell = spawn(this.shellPath, [], {
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
       this.shell.on('error', (err) => {
+        this.traceLog('ERROR', `Shell error: ${err.message}`);
         reject(new Error(`Failed to start shell: ${err.message}`));
       });
 
       this.shell.on('exit', (code) => {
+        this.traceLog('EXIT', `Shell exited with code ${code}`);
         if (!this.shellReady) {
           reject(new Error(`Shell exited prematurely with code ${code}`));
         }
@@ -167,7 +190,9 @@ export class Executor {
 
       // Source the setup script if it exists
       if (this.setupScript) {
+        this.traceLog('STDIN', 'Sourcing setup script');
         this.shell.stdin.write(this.setupScript + '\n');
+        this.traceLog('STDIN', 'Calling before_each_file()');
         // Call before_each_file if defined
         this.shell.stdin.write('type before_each_file >/dev/null 2>&1 && before_each_file\n');
       }
@@ -317,7 +342,9 @@ export class Executor {
       };
 
       const stdoutHandler = (data) => {
-        stdoutBuffer += data.toString();
+        const dataStr = data.toString();
+        this.traceLog('STDOUT', dataStr.trimEnd());
+        stdoutBuffer += dataStr;
 
         // Check if we have the end marker
         const markerRegex = new RegExp(`${stdoutEndMarker}:(\\d+)`);
@@ -358,7 +385,9 @@ export class Executor {
       };
 
       const stderrHandler = (data) => {
-        stderrBuffer += data.toString();
+        const dataStr = data.toString();
+        this.traceLog('STDERR', dataStr.trimEnd());
+        stderrBuffer += dataStr;
         const lines = stderrBuffer.split('\n');
 
         // Keep the last incomplete line in the buffer
@@ -395,6 +424,8 @@ echo "${stdoutEndMarker}:$__EXIT_CODE"
 echo "${stderrEndMarker}" >&2
 `;
 
+      this.traceLog('STDIN', `Command: ${command}`);
+      this.traceLog('STDIN', `Markers: ${stdoutEndMarker}, ${stderrEndMarker}`);
       this.shell.stdin.write(fullCommand);
     });
   }

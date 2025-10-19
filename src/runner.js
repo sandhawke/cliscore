@@ -7,8 +7,10 @@ import { matchOutput } from './matcher.js';
  * @property {string} file - Test file path
  * @property {number} passed - Number of passed tests
  * @property {number} failed - Number of failed tests
+ * @property {number} skipped - Number of skipped tests
  * @property {TestFailure[]} failures - Details of failed tests
  * @property {TestPass[]} [passes] - Details of passed tests (for verbose mode)
+ * @property {TestSkip[]} [skips] - Details of skipped tests
  * @property {Object} [runFirst] - Output from run_first function
  * @property {Object} [runLast] - Output from run_last function
  */
@@ -30,6 +32,13 @@ import { matchOutput } from './matcher.js';
  */
 
 /**
+ * @typedef {Object} TestSkip
+ * @property {string} command - The skipped command
+ * @property {number} lineNumber - Line number in source file
+ * @property {string} reason - Reason for skipping
+ */
+
+/**
  * Run tests from a file
  * @param {string} filePath - Path to test file
  * @param {Object} options - Runner options
@@ -43,15 +52,18 @@ export async function runTestFile(filePath, options = {}) {
   const executor = new Executor({
     step: options.step || false,
     shell: options.shell,
-    timeout: options.timeout || 30
+    timeout: options.timeout || 30,
+    trace: options.trace || false
   });
 
   const result = {
     file: filePath,
     passed: 0,
     failed: 0,
+    skipped: 0,
     failures: [],
-    passes: []
+    passes: [],
+    skips: []
   };
 
   try {
@@ -129,7 +141,17 @@ export async function runTestFile(filePath, options = {}) {
         test.expectedOutput
       );
 
-      if (matchResult.success) {
+      if (matchResult.skipped) {
+        result.skipped++;
+        result.skips.push({
+          command: test.command,
+          lineNumber: test.lineNumber,
+          reason: matchResult.skipReason || 'No reason provided'
+        });
+        if (options.step) {
+          console.log(`⊘ Test SKIPPED: ${matchResult.skipReason}`);
+        }
+      } else if (matchResult.success) {
         result.passed++;
         result.passes.push({
           command: test.command,
@@ -180,10 +202,8 @@ export async function runTestFile(filePath, options = {}) {
     }
   }
 
-  // Stream output for quiet/default modes if callback provided
-  if (options.onFileComplete && options.verbosity <= 1) {
-    options.onFileComplete(result);
-  }
+  // Note: onFileComplete callback is handled by runTestFiles, not here
+  // This allows it to include timing and index information
 
   return result;
 }
@@ -197,25 +217,42 @@ export async function runTestFile(filePath, options = {}) {
  */
 export async function runTestFiles(filePaths, options = {}) {
   const jobs = options.jobs || 1;
+  const totalFiles = options.totalFiles || filePaths.length;
 
   if (jobs === 1) {
     // Sequential execution
     const results = [];
-    for (const filePath of filePaths) {
+    for (let i = 0; i < filePaths.length; i++) {
+      const filePath = filePaths[i];
+      const startTime = Date.now();
       try {
         const result = await runTestFile(filePath, options);
         results.push(result);
+
+        // Call onFileComplete callback if provided
+        if (options.onFileComplete) {
+          const duration = Date.now() - startTime;
+          options.onFileComplete(result, i, totalFiles, duration);
+        }
       } catch (error) {
-        results.push({
+        const result = {
           file: filePath,
           passed: 0,
           failed: 1,
+          skipped: 0,
           failures: [{
             command: '',
             lineNumber: 0,
             error: `Failed to run test file: ${error.message}`
           }]
-        });
+        };
+        results.push(result);
+
+        // Call onFileComplete callback even for errors
+        if (options.onFileComplete) {
+          const duration = Date.now() - startTime;
+          options.onFileComplete(result, i, totalFiles, duration);
+        }
       }
     }
     return results;
@@ -234,21 +271,37 @@ export async function runTestFiles(filePaths, options = {}) {
         index++;
         activeWorkers++;
 
+        const startTime = Date.now();
+
         runTestFile(filePath, options)
           .then(result => {
             results[currentIndex] = result;
+
+            // Call onFileComplete callback if provided
+            if (options.onFileComplete) {
+              const duration = Date.now() - startTime;
+              options.onFileComplete(result, currentIndex, totalFiles, duration);
+            }
           })
           .catch(error => {
-            results[currentIndex] = {
+            const result = {
               file: filePath,
               passed: 0,
               failed: 1,
+              skipped: 0,
               failures: [{
                 command: '',
                 lineNumber: 0,
                 error: `Failed to run test file: ${error.message}`
               }]
             };
+            results[currentIndex] = result;
+
+            // Call onFileComplete callback even for errors
+            if (options.onFileComplete) {
+              const duration = Date.now() - startTime;
+              options.onFileComplete(result, currentIndex, totalFiles, duration);
+            }
           })
           .finally(() => {
             activeWorkers--;
@@ -273,15 +326,17 @@ export async function runTestFiles(filePaths, options = {}) {
  * @param {number} showFailures - Number of failures to show in detail (-1 = all, default: 1)
  * @returns {string}
  */
-export function formatResults(results, verbosity = 1, streamed = false, showFailures = 1) {
+export function formatResults(results, verbosity = 1, streamed = false, showFailures = 1, debug = false) {
   const output = [];
   let totalPassed = 0;
   let totalFailed = 0;
+  let totalSkipped = 0;
   const allFailures = [];
 
   for (const result of results) {
     totalPassed += result.passed;
     totalFailed += result.failed;
+    totalSkipped += result.skipped || 0;
 
     // Collect all failures for later display
     if (result.failures && result.failures.length > 0) {
@@ -293,8 +348,48 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
       }
     }
 
-    const total = result.passed + result.failed;
-    const passRate = total > 0 ? ((result.passed / total) * 100).toFixed(1) : '0.0';
+    const total = result.passed + result.failed + (result.skipped || 0);
+    const passRate = (result.passed + result.failed) > 0
+      ? ((result.passed / (result.passed + result.failed)) * 100).toFixed(1)
+      : '0.0';
+
+    // Debug mode: show test summaries (overrides verbosity)
+    if (debug && !streamed) {
+      output.push(`\n${result.file}:`);
+      const summaryParts = [`${result.passed} passed`, `${result.failed} failed`];
+      if (result.skipped > 0) {
+        summaryParts.push(`${result.skipped} skipped`);
+      }
+      output.push(`  Summary: ${summaryParts.join(', ')} (${passRate}%)`);
+
+      // Show each test with timing
+      if (result.passes && result.passes.length > 0) {
+        for (const pass of result.passes) {
+          const duration = formatDuration(pass.durationMs);
+          const cmdPreview = pass.command.split('\n')[0].substring(0, 70);
+          output.push(`  ✓ Line ${pass.lineNumber}: ${cmdPreview} [${duration}]`);
+        }
+      }
+
+      // Show skipped tests
+      if (result.skips && result.skips.length > 0) {
+        for (const skip of result.skips) {
+          const cmdPreview = skip.command.split('\n')[0].substring(0, 70);
+          output.push(`  ⊘ Line ${skip.lineNumber}: ${cmdPreview} [skipped: ${skip.reason}]`);
+        }
+      }
+
+      if (result.failures && result.failures.length > 0) {
+        for (const failure of result.failures) {
+          const duration = formatDuration(failure.durationMs);
+          const cmdPreview = failure.command.split('\n')[0].substring(0, 70);
+          const errorBrief = failure.error.split('\n')[0];
+          output.push(`  ✗ Line ${failure.lineNumber}: ${cmdPreview} [${duration}]`);
+          output.push(`    Error: ${errorBrief}`);
+        }
+      }
+      continue;
+    }
 
     // Level 0 (quiet): nothing per file, just summary at end
     if (verbosity === 0) {
@@ -373,6 +468,14 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
         }
       }
 
+      // Show all skipped tests
+      if (result.skips && result.skips.length > 0) {
+        for (const skip of result.skips) {
+          const cmdPreview = skip.command.split('\n')[0].substring(0, 60);
+          output.push(`  ⊘ Line ${skip.lineNumber}: ${cmdPreview} [${skip.reason}]`);
+        }
+      }
+
       // Show all failing tests
       if (result.failed > 0) {
         for (const failure of result.failures) {
@@ -414,6 +517,14 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
           const cmdPreview = pass.command.split('\n')[0].substring(0, 60);
           const duration = formatDuration(pass.durationMs);
           output.push(`  ✓ Line ${pass.lineNumber}: ${cmdPreview} (${duration})`);
+        }
+      }
+
+      // Show all skipped tests
+      if (result.skips && result.skips.length > 0) {
+        for (const skip of result.skips) {
+          const cmdPreview = skip.command.split('\n')[0].substring(0, 60);
+          output.push(`  ⊘ Line ${skip.lineNumber}: ${cmdPreview} [${skip.reason}]`);
         }
       }
 
@@ -491,26 +602,34 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
   }
 
   // Summary
-  const total = totalPassed + totalFailed;
-  const passRate = total > 0 ? ((totalPassed / total) * 100).toFixed(1) : '0.0';
+  const total = totalPassed + totalFailed + totalSkipped;
+  const passRate = (totalPassed + totalFailed) > 0
+    ? ((totalPassed / (totalPassed + totalFailed)) * 100).toFixed(1)
+    : '0.0';
+
+  // Build summary message parts
+  const buildSummary = () => {
+    if (totalFailed === 0 && totalSkipped === 0) {
+      return `✓ All tests passed! (${totalPassed}/${total})`;
+    } else if (totalFailed === 0) {
+      return `✓ ${totalPassed} passed, ${totalSkipped} skipped (${totalPassed}/${total})`;
+    } else {
+      const parts = [`${totalFailed} test${totalFailed !== 1 ? 's' : ''} failed`, `${totalPassed} passed`];
+      if (totalSkipped > 0) {
+        parts.push(`${totalSkipped} skipped`);
+      }
+      return `✗ ${parts.join(', ')} (${passRate}% pass rate)`;
+    }
+  };
 
   // Level 0-1: no separator, just summary
   if (verbosity <= 1) {
-    if (totalFailed === 0) {
-      output.push(`✓ All tests passed! (${totalPassed}/${total})`);
-    } else {
-      output.push(`✗ ${totalFailed} test${totalFailed !== 1 ? 's' : ''} failed, ${totalPassed} passed (${passRate}% pass rate)`);
-    }
+    output.push(buildSummary());
   } else {
     // Level 2+: add separator before summary
     output.push('');
     output.push('═'.repeat(60));
-
-    if (totalFailed === 0) {
-      output.push(`✓ All tests passed! (${totalPassed}/${total})`);
-    } else {
-      output.push(`✗ ${totalFailed} test${totalFailed !== 1 ? 's' : ''} failed, ${totalPassed} passed (${passRate}% pass rate)`);
-    }
+    output.push(buildSummary());
   }
 
   return output.join('\n');
@@ -541,23 +660,28 @@ function formatDuration(ms) {
 export function getSummary(results) {
   let totalPassed = 0;
   let totalFailed = 0;
+  let totalSkipped = 0;
   let totalFiles = results.length;
   let filesWithFailures = 0;
 
   for (const result of results) {
     totalPassed += result.passed;
     totalFailed += result.failed;
+    totalSkipped += result.skipped || 0;
     if (result.failed > 0) {
       filesWithFailures++;
     }
   }
+
+  const totalTests = totalPassed + totalFailed + totalSkipped;
 
   return {
     totalFiles,
     filesWithFailures,
     totalPassed,
     totalFailed,
-    totalTests: totalPassed + totalFailed,
+    totalSkipped,
+    totalTests,
     passRate: totalPassed + totalFailed > 0
       ? (totalPassed / (totalPassed + totalFailed)) * 100
       : 0

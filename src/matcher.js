@@ -7,6 +7,8 @@
  * @property {boolean} success - Whether the match succeeded
  * @property {string} [error] - Error message if match failed
  * @property {number} [linesConsumed] - Number of output lines consumed
+ * @property {boolean} [skipped] - Whether the test was skipped
+ * @property {string} [skipReason] - Reason for skipping
  */
 
 /**
@@ -17,6 +19,16 @@
  * @returns {MatchResult}
  */
 export function matchOutput(stdout, stderr, expectations) {
+  // Check if test should be skipped
+  const skipExpectation = expectations.find(e => e.type === 'skip');
+  if (skipExpectation) {
+    return {
+      success: true,
+      skipped: true,
+      skipReason: skipExpectation.reason || 'No reason provided'
+    };
+  }
+
   // Combine stdout and stderr with metadata about which stream each line came from
   const combinedOutput = [
     ...stdout.map(line => ({ line, stream: 'stdout' })),
@@ -128,6 +140,61 @@ export function matchOutput(stdout, stderr, expectations) {
  */
 function matchSingleLine(actualLine, expectation) {
   switch (expectation.type) {
+    case 'inline': {
+      // Handle inline patterns like: text [Matching: /\d+/] more text
+      const pattern = expectation.pattern;
+
+      // Build regex by replacing inline patterns with their regex equivalents
+      let regexPattern = pattern;
+
+      // Replace [Matching: /regex/flags] with captured group
+      regexPattern = regexPattern.replace(/\[Matching:\s*\/([^\/]+)\/([gimsuvy]*)\]/g, (match, regex, flags) => {
+        // For inline matching, we ignore flags for simplicity and just use the pattern
+        return `(${regex})`;
+      });
+
+      // Replace [Matching glob: pattern] with glob-converted regex
+      regexPattern = regexPattern.replace(/\[Matching glob:\s*([^\]]+)\]/g, (match, globPattern) => {
+        // Convert glob to regex pattern
+        let glob = globPattern.trim();
+        glob = glob.replace(/\*/g, '.*').replace(/\?/g, '.');
+        return `(${glob})`;
+      });
+
+      // Escape special regex characters in the literal parts
+      // First, mark the parts we want to keep as-is
+      const markers = [];
+      regexPattern = regexPattern.replace(/\([^)]+\)/g, (match) => {
+        markers.push(match);
+        return `__MARKER_${markers.length - 1}__`;
+      });
+
+      // Escape the literal parts
+      regexPattern = regexPattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+
+      // Restore the markers
+      markers.forEach((marker, i) => {
+        regexPattern = regexPattern.replace(`__MARKER_${i}__`, marker);
+      });
+
+      // Try to match
+      try {
+        const regex = new RegExp(`^${regexPattern}$`);
+        if (regex.test(actualLine)) {
+          return { success: true };
+        }
+        return {
+          success: false,
+          error: `Inline pattern did not match`
+        };
+      } catch (err) {
+        return {
+          success: false,
+          error: `Invalid inline pattern: ${err.message}`
+        };
+      }
+    }
+
     case 'literal':
       // Try literal match first (as per UTF spec)
       if (actualLine === expectation.pattern) {
