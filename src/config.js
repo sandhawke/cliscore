@@ -106,9 +106,16 @@ export function mergeConfig(config, cliOptions) {
   }
 
   // Apply CLI options (these override everything)
-  if (cliOptions.allowedLanguages && cliOptions.allowedLanguages.length > 1) {
-    // CLI added languages beyond the default - use them
-    merged.allowedLanguages = [...cliOptions.allowedLanguages];
+  // Only override if CLI value is different from defaults
+  // This allows config file to take precedence over default CLI values
+  if (cliOptions.allowedLanguages) {
+    const isDefault = JSON.stringify(cliOptions.allowedLanguages) === JSON.stringify(defaults.allowedLanguages) ||
+                     JSON.stringify(cliOptions.allowedLanguages) === JSON.stringify(['cliscore']); // Legacy default
+
+    // Only apply if user explicitly changed from default via --allow-lang
+    if (!isDefault || !config.allowedLanguages) {
+      merged.allowedLanguages = [...cliOptions.allowedLanguages];
+    }
   }
   if (cliOptions.jobs !== undefined && cliOptions.jobs !== 1) {
     // CLI specified jobs explicitly
