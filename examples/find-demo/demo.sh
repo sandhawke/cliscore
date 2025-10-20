@@ -26,7 +26,7 @@ echo "   run_last() will verify all clean"
 echo
 echo "Running: cliscore test-find.md"
 echo "----------------------------------------"
-../../src/cli.js test-find.md
+../../src/cli.js test-find.md --debug
 echo "----------------------------------------"
 echo
 
