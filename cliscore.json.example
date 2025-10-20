@@ -1,10 +1,10 @@
 {
   "allowedLanguages": [
     "cliscore",
+    "console",
     "shell-session",
-    "bash",
-    "sh"
+    "bash"
   ],
   "jobs": 4,
-  "fast": false
+  "shell": "/bin/bash"
 }
