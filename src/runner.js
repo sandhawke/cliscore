@@ -57,6 +57,11 @@ export async function runTestFile(filePath, options = {}) {
     trace: options.trace || false
   });
 
+  // Load setup script early so run_first can execute before shell starts
+  if (executor.setupScript === null) {
+    executor.setupScript = await executor.loadSetupScript(executor.testFilePath);
+  }
+
   const result = {
     file: filePath,
     passed: 0,
@@ -74,6 +79,18 @@ export async function runTestFile(filePath, options = {}) {
       try {
         const runFirstResult = await executor.executeInSeparateShell(runFirstScript);
         result.runFirst = runFirstResult;
+
+        // Print run_first output immediately to console
+        if (runFirstResult.stdout && runFirstResult.stdout.length > 0) {
+          for (const line of runFirstResult.stdout) {
+            console.log(line);
+          }
+        }
+        if (runFirstResult.stderr && runFirstResult.stderr.length > 0) {
+          for (const line of runFirstResult.stderr) {
+            console.error(line);
+          }
+        }
 
         // If run_first fails with non-zero exit, report warning but continue
         if (runFirstResult.exitCode !== 0) {
@@ -188,6 +205,18 @@ export async function runTestFile(filePath, options = {}) {
       try {
         const runLastResult = await executor.executeInSeparateShell(runLastScript);
         result.runLast = runLastResult;
+
+        // Print run_last output immediately to console
+        if (runLastResult.stdout && runLastResult.stdout.length > 0) {
+          for (const line of runLastResult.stdout) {
+            console.log(line);
+          }
+        }
+        if (runLastResult.stderr && runLastResult.stderr.length > 0) {
+          for (const line of runLastResult.stderr) {
+            console.error(line);
+          }
+        }
 
         // If run_last fails with non-zero exit, report warning
         if (runLastResult.exitCode !== 0) {
