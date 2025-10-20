@@ -182,15 +182,16 @@ Examples:
 /**
  * Expand glob patterns and find test files
  * @param {string[]} patterns - File patterns
+ * @param {string[]} ignoredDirectories - Directory names to ignore
  * @returns {Promise<string[]>}
  */
-async function findTestFiles(patterns) {
+async function findTestFiles(patterns, ignoredDirectories) {
   const files = new Set();
 
   for (const pattern of patterns) {
     // Simple glob expansion - handle basic patterns
     if (pattern.includes('*')) {
-      const expanded = await expandGlob(pattern);
+      const expanded = await expandGlob(pattern, ignoredDirectories);
       for (const file of expanded) {
         files.add(file);
       }
@@ -206,9 +207,10 @@ async function findTestFiles(patterns) {
 /**
  * Expand a glob pattern (simple implementation)
  * @param {string} pattern - Glob pattern
+ * @param {string[]} ignoredDirectories - Directory names to ignore
  * @returns {Promise<string[]>}
  */
-async function expandGlob(pattern) {
+async function expandGlob(pattern, ignoredDirectories) {
   const files = [];
 
   // Extract the directory and pattern parts
@@ -224,7 +226,7 @@ async function expandGlob(pattern) {
   }
 
   // Recursively search
-  await searchDirectory(basePath, patternParts, files);
+  await searchDirectory(basePath, patternParts, files, ignoredDirectories);
 
   return files;
 }
@@ -232,24 +234,11 @@ async function expandGlob(pattern) {
 /**
  * Check if a directory should be ignored
  * @param {string} dirname - Directory name
+ * @param {string[]} ignoredDirectories - List of directory names to ignore
  * @returns {boolean}
  */
-function shouldIgnoreDirectory(dirname) {
-  const ignoreDirs = [
-    'node_modules',
-    '.git',
-    '.svn',
-    '.hg',
-    'coverage',
-    'dist',
-    'build',
-    '.next',
-    '.nuxt',
-    'out',
-    'vendor',
-    'fixtures'
-  ];
-  return ignoreDirs.includes(dirname) || dirname.startsWith('.');
+function shouldIgnoreDirectory(dirname, ignoredDirectories) {
+  return ignoredDirectories.includes(dirname) || dirname.startsWith('.');
 }
 
 /**
@@ -257,8 +246,9 @@ function shouldIgnoreDirectory(dirname) {
  * @param {string} dir - Current directory
  * @param {string[]} patternParts - Remaining pattern parts
  * @param {string[]} results - Accumulator for results
+ * @param {string[]} ignoredDirectories - Directory names to ignore
  */
-async function searchDirectory(dir, patternParts, results) {
+async function searchDirectory(dir, patternParts, results, ignoredDirectories) {
   if (patternParts.length === 0) {
     return;
   }
@@ -270,7 +260,7 @@ async function searchDirectory(dir, patternParts, results) {
 
     for (const entry of entries) {
       // Skip ignored directories
-      if (shouldIgnoreDirectory(entry)) {
+      if (shouldIgnoreDirectory(entry, ignoredDirectories)) {
         continue;
       }
 
@@ -281,10 +271,10 @@ async function searchDirectory(dir, patternParts, results) {
         // Recursive wildcard
         if (stats.isDirectory()) {
           // Continue with ** pattern for subdirectories
-          await searchDirectory(fullPath, patternParts, results);
+          await searchDirectory(fullPath, patternParts, results, ignoredDirectories);
           // Also try matching with remaining patterns
           if (remainingParts.length > 0) {
-            await searchDirectory(fullPath, remainingParts, results);
+            await searchDirectory(fullPath, remainingParts, results, ignoredDirectories);
           }
         } else if (remainingParts.length === 0) {
           // ** at the end matches all files
@@ -309,7 +299,7 @@ async function searchDirectory(dir, patternParts, results) {
           }
         } else if (stats.isDirectory()) {
           // Continue with remaining patterns
-          await searchDirectory(fullPath, remainingParts, results);
+          await searchDirectory(fullPath, remainingParts, results, ignoredDirectories);
         }
       }
     }
@@ -378,7 +368,7 @@ async function main() {
     options.files = ['**/*.t', '**/*.md', '**/*.cliscore'];
   }
 
-  const testFiles = await findTestFiles(options.files);
+  const testFiles = await findTestFiles(options.files, options.ignoredDirectories);
 
   if (testFiles.length === 0) {
     console.error('Error: No test files found');

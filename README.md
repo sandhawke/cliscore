@@ -83,7 +83,7 @@ cliscore --percent --fast
 cliscore --allow-lang shell-session
 ```
 
-By default, cliscore recursively finds all `.t`, `.md`, and `.cliscore` files, automatically ignoring `node_modules/`, `.git/`, and other common directories.
+By default, cliscore recursively finds all `.t`, `.md`, and `.cliscore` files, automatically ignoring common directories (see [Ignored Directories](#ignored-directories) below).
 
 ### Programmatic API
 
@@ -240,7 +240,8 @@ Create `cliscore.json` in your project root for default settings:
 {
   "allowedLanguages": ["cliscore", "console", "shellsession", "bash"],
   "jobs": 4,
-  "shell": "/bin/bash"
+  "shell": "/bin/bash",
+  "ignoredDirectories": ["node_modules", ".git", "custom_dir"]
 }
 ```
 
@@ -251,6 +252,7 @@ Available options:
 - `jobs`: Number of test files to run in parallel (default: `1`)
 - `fast`: Enable fast mode with 8 parallel jobs (default: `false`)
 - `shell`: Shell to use for executing commands (default: `"/bin/sh"`)
+- `ignoredDirectories`: Array of directory names to ignore when searching for tests (default: see below)
 
 ## Options
 
@@ -351,6 +353,49 @@ test_helper() {
 **Important**: `after_each_file()` won't run if the shell crashes or times out. Use `run_last()` for critical cleanup that must always happen.
 
 See [SETUP.md](SETUP.md) for detailed documentation on the lifecycle and when to use each function.
+
+## Ignored Directories
+
+When searching for test files with glob patterns (or default search), cliscore automatically ignores the following directories:
+
+**Default ignored directories:**
+- `node_modules` - Node.js packages
+- `.git`, `.svn`, `.hg` - Version control
+- `coverage` - Test coverage reports
+- `dist`, `build`, `out` - Build outputs
+- `.next`, `.nuxt` - Framework build directories
+- `vendor` - Dependency directories
+- `fixtures` - Test fixture data
+- Any directory starting with `.` (hidden directories)
+
+**To customize ignored directories**, add an `ignoredDirectories` array to your `cliscore.json`:
+
+```json
+{
+  "ignoredDirectories": ["node_modules", ".git", "my_custom_ignore"]
+}
+```
+
+**Note:** Setting `ignoredDirectories` in your config **replaces** the default list entirely. If you want to keep the defaults and add more, include them explicitly:
+
+```json
+{
+  "ignoredDirectories": [
+    "node_modules", ".git", ".svn", ".hg",
+    "coverage", "dist", "build", ".next", ".nuxt", "out",
+    "vendor", "fixtures",
+    "my_custom_dir"
+  ]
+}
+```
+
+**To run tests in normally-ignored directories**, specify the file path explicitly:
+
+```bash
+cliscore fixtures/my-test.md
+```
+
+This will work even if `fixtures` is in the ignored list, because explicit paths bypass the search filters.
 
 ## Exit Codes
 
