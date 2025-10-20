@@ -4,7 +4,7 @@ Test that cliscore correctly detects and reports failures.
 
 ## Failing Test
 
-```cliscore
+```console
 $ cliscore fixtures/failing.md
 ...
 [Matching: /✗ 1 test/]
@@ -12,7 +12,7 @@ $ cliscore fixtures/failing.md
 
 Exit code should be non-zero:
 
-```cliscore
+```console
 $ cliscore fixtures/failing.md || echo "exit code: $?"
 ...
 exit code: 1
@@ -20,14 +20,14 @@ exit code: 1
 
 ## Failure Output
 
-```cliscore
+```console
 $ cliscore fixtures/failing.md 2>&1 | grep -c "failed"
 [Matching: /[1-9]/]
 ```
 
 ## Mixed Results
 
-```cliscore
+```console
 $ cliscore fixtures/basic.md fixtures/failing.md
 ...
 [Matching: /✗ 1 test/]
@@ -37,7 +37,7 @@ $ cliscore fixtures/basic.md fixtures/failing.md
 
 Failures should show expected vs actual (with -v for details):
 
-```cliscore
+```console
 $ cliscore -v fixtures/failing.md 2>&1
 ...
 [Matching: /Expected:/]

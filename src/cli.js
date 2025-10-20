@@ -1,10 +1,31 @@
 #!/usr/bin/env node
 
-import { readdir, stat } from 'fs/promises';
-import { join, resolve } from 'path';
+import { readdir, stat, readFile } from 'fs/promises';
+import { join, resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { parseTestFile } from './parser.js';
 import { runTestFiles, formatResults, getSummary } from './runner.js';
 import { loadConfig, mergeConfig } from './config.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+/**
+ * Format duration in milliseconds to human-readable string
+ * @param {number} ms - Duration in milliseconds
+ * @returns {string}
+ */
+function formatDuration(ms) {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  } else if (ms < 60000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  } else {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = ((ms % 60000) / 1000).toFixed(1);
+    return `${minutes}m${seconds}s`;
+  }
+}
 
 /**
  * Parse command-line arguments
@@ -18,10 +39,15 @@ function parseArgs(args) {
     step: false,
     percent: false,
     verbosity: 1, // 0=quiet, 1=normal, 2=verbose, 3=very verbose
-    allowedLanguages: ['cliscore'],
+    allowedLanguages: ['console', 'cliscore'],
     files: [],
     jobs: 1,
-    shell: undefined
+    shell: undefined,
+    show: 1, // Number of failures to show in detail (default: 1)
+    timeout: 30, // Timeout in seconds per test (default: 30)
+    debug: false, // Debug mode: show test summaries
+    trace: false, // Trace mode: show all I/O events
+    progress: false // Progress mode: show real-time progress
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -64,6 +90,42 @@ function parseArgs(args) {
         process.exit(1);
       }
       options.shell = args[++i];
+    } else if (arg === '--show') {
+      if (i + 1 >= args.length) {
+        console.error('Error: --show requires a number or "all"');
+        process.exit(1);
+      }
+      const value = args[++i];
+      if (value === 'all' || value === '-1') {
+        options.show = -1;
+      } else {
+        const num = parseInt(value, 10);
+        if (isNaN(num) || num < 0) {
+          console.error('Error: --show must be a non-negative number or "all"');
+          process.exit(1);
+        }
+        options.show = num;
+      }
+    } else if (arg === '--timeout') {
+      if (i + 1 >= args.length) {
+        console.error('Error: --timeout requires a number (seconds)');
+        process.exit(1);
+      }
+      const timeout = parseInt(args[++i], 10);
+      if (isNaN(timeout) || timeout < 1) {
+        console.error('Error: --timeout must be a positive number');
+        process.exit(1);
+      }
+      options.timeout = timeout;
+    } else if (arg === '--debug') {
+      options.debug = true;
+    } else if (arg === '--trace') {
+      options.trace = true;
+      options.debug = true; // trace implies debug
+    } else if (arg === '--progress') {
+      options.progress = true;
+    } else if (arg === '--version' || arg === '-V') {
+      options.showVersion = true;
     } else if (arg === '--help' || arg === '-h') {
       printHelp();
       process.exit(0);
@@ -76,6 +138,19 @@ function parseArgs(args) {
   }
 
   return options;
+}
+
+/**
+ * Print version information
+ */
+async function printVersion() {
+  try {
+    const packagePath = resolve(__dirname, '../package.json');
+    const packageJson = JSON.parse(await readFile(packagePath, 'utf-8'));
+    console.log(`cliscore v${packageJson.version}`);
+  } catch (error) {
+    console.log('cliscore (version unknown)');
+  }
 }
 
 /**
@@ -101,6 +176,12 @@ Options:
   --fast              Run tests in parallel with 8 jobs (equivalent to --jobs 8)
   --allow-lang <lang> Allow additional markdown language identifier (can be used multiple times)
   --shell <path>      Shell to use for executing commands (default: /bin/sh)
+  --show N            Show details for first N failures (default: 1, use "all" or -1 for all)
+  --timeout N         Timeout in seconds per test (default: 30)
+  --debug             Debug mode: show summary of what happened with each test
+  --trace             Trace mode: show all I/O events (read/write to shell)
+  --progress          Show real-time progress as files complete
+  -V, --version       Show version number
   -h, --help          Show this help message
 
 Test Files:
@@ -121,15 +202,16 @@ Examples:
 /**
  * Expand glob patterns and find test files
  * @param {string[]} patterns - File patterns
+ * @param {string[]} ignoredDirectories - Directory names to ignore
  * @returns {Promise<string[]>}
  */
-async function findTestFiles(patterns) {
+async function findTestFiles(patterns, ignoredDirectories) {
   const files = new Set();
 
   for (const pattern of patterns) {
     // Simple glob expansion - handle basic patterns
     if (pattern.includes('*')) {
-      const expanded = await expandGlob(pattern);
+      const expanded = await expandGlob(pattern, ignoredDirectories);
       for (const file of expanded) {
         files.add(file);
       }
@@ -145,9 +227,10 @@ async function findTestFiles(patterns) {
 /**
  * Expand a glob pattern (simple implementation)
  * @param {string} pattern - Glob pattern
+ * @param {string[]} ignoredDirectories - Directory names to ignore
  * @returns {Promise<string[]>}
  */
-async function expandGlob(pattern) {
+async function expandGlob(pattern, ignoredDirectories) {
   const files = [];
 
   // Extract the directory and pattern parts
@@ -163,7 +246,7 @@ async function expandGlob(pattern) {
   }
 
   // Recursively search
-  await searchDirectory(basePath, patternParts, files);
+  await searchDirectory(basePath, patternParts, files, ignoredDirectories);
 
   return files;
 }
@@ -171,24 +254,11 @@ async function expandGlob(pattern) {
 /**
  * Check if a directory should be ignored
  * @param {string} dirname - Directory name
+ * @param {string[]} ignoredDirectories - List of directory names to ignore
  * @returns {boolean}
  */
-function shouldIgnoreDirectory(dirname) {
-  const ignoreDirs = [
-    'node_modules',
-    '.git',
-    '.svn',
-    '.hg',
-    'coverage',
-    'dist',
-    'build',
-    '.next',
-    '.nuxt',
-    'out',
-    'vendor',
-    'fixtures'
-  ];
-  return ignoreDirs.includes(dirname) || dirname.startsWith('.');
+function shouldIgnoreDirectory(dirname, ignoredDirectories) {
+  return ignoredDirectories.includes(dirname) || dirname.startsWith('.');
 }
 
 /**
@@ -196,8 +266,9 @@ function shouldIgnoreDirectory(dirname) {
  * @param {string} dir - Current directory
  * @param {string[]} patternParts - Remaining pattern parts
  * @param {string[]} results - Accumulator for results
+ * @param {string[]} ignoredDirectories - Directory names to ignore
  */
-async function searchDirectory(dir, patternParts, results) {
+async function searchDirectory(dir, patternParts, results, ignoredDirectories) {
   if (patternParts.length === 0) {
     return;
   }
@@ -209,7 +280,7 @@ async function searchDirectory(dir, patternParts, results) {
 
     for (const entry of entries) {
       // Skip ignored directories
-      if (shouldIgnoreDirectory(entry)) {
+      if (shouldIgnoreDirectory(entry, ignoredDirectories)) {
         continue;
       }
 
@@ -220,10 +291,10 @@ async function searchDirectory(dir, patternParts, results) {
         // Recursive wildcard
         if (stats.isDirectory()) {
           // Continue with ** pattern for subdirectories
-          await searchDirectory(fullPath, patternParts, results);
+          await searchDirectory(fullPath, patternParts, results, ignoredDirectories);
           // Also try matching with remaining patterns
           if (remainingParts.length > 0) {
-            await searchDirectory(fullPath, remainingParts, results);
+            await searchDirectory(fullPath, remainingParts, results, ignoredDirectories);
           }
         } else if (remainingParts.length === 0) {
           // ** at the end matches all files
@@ -248,7 +319,7 @@ async function searchDirectory(dir, patternParts, results) {
           }
         } else if (stats.isDirectory()) {
           // Continue with remaining patterns
-          await searchDirectory(fullPath, remainingParts, results);
+          await searchDirectory(fullPath, remainingParts, results, ignoredDirectories);
         }
       }
     }
@@ -296,6 +367,12 @@ async function main() {
   // Parse CLI arguments
   const cliOptions = parseArgs(process.argv.slice(2));
 
+  // Handle --version flag
+  if (cliOptions.showVersion) {
+    await printVersion();
+    process.exit(0);
+  }
+
   // Merge config: defaults < cliscore.json < CLI args
   const options = mergeConfig(config, cliOptions);
 
@@ -306,13 +383,18 @@ async function main() {
   options.percent = cliOptions.percent;
   options.verbosity = cliOptions.verbosity;
   options.files = cliOptions.files;
+  options.show = cliOptions.show;
+  options.timeout = cliOptions.timeout;
+  options.debug = cliOptions.debug;
+  options.trace = cliOptions.trace;
+  options.progress = cliOptions.progress;
 
   // Default pattern if no files specified
   if (options.files.length === 0) {
     options.files = ['**/*.t', '**/*.md', '**/*.cliscore'];
   }
 
-  const testFiles = await findTestFiles(options.files);
+  const testFiles = await findTestFiles(options.files, options.ignoredDirectories);
 
   if (testFiles.length === 0) {
     console.error('Error: No test files found');
@@ -359,16 +441,26 @@ async function main() {
       step: options.step,
       verbosity: options.verbosity,
       shell: options.shell,
-      // Stream output for quiet/default modes
-      onFileComplete: (options.verbosity <= 1 && !options.json && !options.percent)
-        ? (result) => {
-            const total = result.passed + result.failed;
-            const passRate = total > 0 ? ((result.passed / total) * 100).toFixed(1) : '0.0';
+      timeout: options.timeout,
+      debug: options.debug,
+      trace: options.trace,
+      progress: options.progress,
+      totalFiles: testFiles.length,
+      // Stream output for quiet/default modes (but not debug/trace)
+      onFileComplete: (options.verbosity <= 1 && !options.json && !options.percent && !options.debug && !options.trace)
+        ? (result, index, total, duration) => {
+            const testTotal = result.passed + result.failed;
+            const passRate = testTotal > 0 ? ((result.passed / testTotal) * 100).toFixed(1) : '0.0';
 
-            if (options.verbosity === 1) {
+            if (options.progress) {
+              // Progress mode: [N/total] file (duration) status
+              const status = result.failed === 0 ? '✓' : '✗';
+              const durationStr = duration ? ` (${formatDuration(duration)})` : '';
+              console.log(`[${index + 1}/${total}] ${result.file}${durationStr} ${status}`);
+            } else if (options.verbosity === 1) {
               // Default: one line per file
               const status = result.failed === 0 ? '✓' : '✗';
-              console.log(`${status} ${result.file}: ${passRate}% (${result.passed}/${total})`);
+              console.log(`${status} ${result.file}: ${passRate}% (${result.passed}/${testTotal})`);
             }
             // Quiet mode (0): print nothing per file
           }
@@ -383,8 +475,8 @@ async function main() {
     } else if (options.json) {
       console.log(JSON.stringify({ summary, results }, null, 2));
     } else {
-      const wasStreamed = options.verbosity <= 1;
-      console.log(formatResults(results, options.verbosity, wasStreamed));
+      const wasStreamed = options.verbosity <= 1 && !options.debug && !options.trace;
+      console.log(formatResults(results, options.verbosity, wasStreamed, options.show, options.debug));
     }
 
     // Exit with error code if any tests failed

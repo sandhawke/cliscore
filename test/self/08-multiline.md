@@ -4,7 +4,7 @@ Test continuation line support.
 
 ## Basic Continuation
 
-```cliscore
+```console
 $ echo "line1" && \
 > echo "line2"
 line1
@@ -13,7 +13,7 @@ line2
 
 ## Multiple Continuations
 
-```cliscore
+```console
 $ echo "a" && \
 > echo "b" && \
 > echo "c"

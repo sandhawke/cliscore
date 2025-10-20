@@ -7,6 +7,8 @@
  * @property {boolean} success - Whether the match succeeded
  * @property {string} [error] - Error message if match failed
  * @property {number} [linesConsumed] - Number of output lines consumed
+ * @property {boolean} [skipped] - Whether the test was skipped
+ * @property {string} [skipReason] - Reason for skipping
  */
 
 /**
@@ -17,6 +19,16 @@
  * @returns {MatchResult}
  */
 export function matchOutput(stdout, stderr, expectations) {
+  // Check if test should be skipped
+  const skipExpectation = expectations.find(e => e.type === 'skip');
+  if (skipExpectation) {
+    return {
+      success: true,
+      skipped: true,
+      skipReason: skipExpectation.reason || 'No reason provided'
+    };
+  }
+
   // Combine stdout and stderr with metadata about which stream each line came from
   const combinedOutput = [
     ...stdout.map(line => ({ line, stream: 'stdout' })),
@@ -98,9 +110,22 @@ export function matchOutput(stdout, stderr, expectations) {
   }
 
   if (unmatchedLines.length > 0) {
+    // Generate helpful suggestion showing what to add
+    const suggestions = [];
+    for (let i = actualIndex; i < Math.min(actualIndex + 3, combinedOutput.length); i++) {
+      const line = combinedOutput[i].line;
+      if (combinedOutput[i].stream === 'stderr') {
+        suggestions.push(`[stderr: ${line}]`);
+      } else {
+        suggestions.push(line);
+      }
+    }
+
+    const more = combinedOutput.length - actualIndex > 3 ? `\n  ... (${combinedOutput.length - actualIndex - 3} more lines)` : '';
+
     return {
       success: false,
-      error: `Unexpected extra output:\n  ${unmatchedLines.join('\n  ')}`
+      error: `Unexpected extra output:\n  ${unmatchedLines.slice(0, 3).join('\n  ')}${more}\n\nHint: Add these lines to your test:\n  ${suggestions.join('\n  ')}`
     };
   }
 
@@ -115,14 +140,82 @@ export function matchOutput(stdout, stderr, expectations) {
  */
 function matchSingleLine(actualLine, expectation) {
   switch (expectation.type) {
+    case 'inline': {
+      // Handle inline patterns like: text [Matching: /\d+/] more text
+      const pattern = expectation.pattern;
+
+      // Build regex by replacing inline patterns with their regex equivalents
+      let regexPattern = pattern;
+
+      // Replace [Matching: /regex/flags] with captured group
+      regexPattern = regexPattern.replace(/\[Matching:\s*\/([^\/]+)\/([gimsuvy]*)\]/g, (match, regex, flags) => {
+        // For inline matching, we ignore flags for simplicity and just use the pattern
+        return `(${regex})`;
+      });
+
+      // Replace [Matching glob: pattern] with glob-converted regex
+      regexPattern = regexPattern.replace(/\[Matching glob:\s*([^\]]+)\]/g, (match, globPattern) => {
+        // Convert glob to regex pattern
+        let glob = globPattern.trim();
+        glob = glob.replace(/\*/g, '.*').replace(/\?/g, '.');
+        return `(${glob})`;
+      });
+
+      // Escape special regex characters in the literal parts
+      // First, mark the parts we want to keep as-is
+      const markers = [];
+      regexPattern = regexPattern.replace(/\([^)]+\)/g, (match) => {
+        markers.push(match);
+        return `__MARKER_${markers.length - 1}__`;
+      });
+
+      // Escape the literal parts
+      regexPattern = regexPattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+
+      // Restore the markers
+      markers.forEach((marker, i) => {
+        regexPattern = regexPattern.replace(`__MARKER_${i}__`, marker);
+      });
+
+      // Try to match
+      try {
+        const regex = new RegExp(`^${regexPattern}$`);
+        if (regex.test(actualLine)) {
+          return { success: true };
+        }
+        return {
+          success: false,
+          error: `Inline pattern did not match`
+        };
+      } catch (err) {
+        return {
+          success: false,
+          error: `Invalid inline pattern: ${err.message}`
+        };
+      }
+    }
+
     case 'literal':
       // Try literal match first (as per UTF spec)
       if (actualLine === expectation.pattern) {
         return { success: true };
       }
+
+      // Provide helpful suggestions for common mistakes
+      let suggestion = '';
+      if (actualLine.includes(expectation.pattern)) {
+        suggestion = ' (expected text appears but with extra characters)';
+      } else if (expectation.pattern.includes(actualLine)) {
+        suggestion = ' (actual output is a subset of expected)';
+      } else if (actualLine.toLowerCase() === expectation.pattern.toLowerCase()) {
+        suggestion = ' (case mismatch - actual is different case)';
+      } else if (actualLine.trim() === expectation.pattern.trim()) {
+        suggestion = ' (whitespace mismatch - try checking leading/trailing spaces)';
+      }
+
       return {
         success: false,
-        error: `Literal mismatch`
+        error: `Literal mismatch${suggestion}`
       };
 
     case 'regex': {
@@ -131,9 +224,20 @@ function matchSingleLine(actualLine, expectation) {
         if (regex.test(actualLine)) {
           return { success: true };
         }
+
+        // Provide suggestion for regex issues
+        let suggestion = '';
+        if (!expectation.flags || !expectation.flags.includes('i')) {
+          // Test if case-insensitive would work
+          const caseInsensitiveRegex = new RegExp(expectation.pattern, (expectation.flags || '') + 'i');
+          if (caseInsensitiveRegex.test(actualLine)) {
+            suggestion = ' (hint: would match with case-insensitive flag /i)';
+          }
+        }
+
         return {
           success: false,
-          error: `Regex did not match`
+          error: `Regex did not match: /${expectation.pattern}/${expectation.flags || ''}${suggestion}`
         };
       } catch (err) {
         return {

@@ -1,5 +1,5 @@
 import { readFile } from 'fs/promises';
-import { basename } from 'path';
+import { basename, extname } from 'path';
 
 /**
  * @typedef {Object} TestCommand
@@ -10,10 +10,12 @@ import { basename } from 'path';
 
 /**
  * @typedef {Object} OutputExpectation
- * @property {'literal'|'regex'|'glob'|'ellipsis'|'no-eol'|'stderr'} type
+ * @property {'literal'|'regex'|'glob'|'ellipsis'|'no-eol'|'stderr'|'skip'|'inline'} type
  * @property {string} [pattern] - Pattern to match (not used for ellipsis)
  * @property {string} [flags] - Regex flags (for regex type)
  * @property {'stdout'|'stderr'} [stream] - Which stream to match (defaults to stdout)
+ * @property {string} [reason] - Skip reason (for skip type)
+ * @property {Array} [patterns] - Array of inline patterns (for inline type)
  */
 
 /**
@@ -28,9 +30,9 @@ import { basename } from 'path';
  * @param {string[]} allowedLanguages - Additional language identifiers for markdown code blocks
  * @returns {Promise<TestFile>}
  */
-export async function parseTestFile(filePath, allowedLanguages = ['cliscore']) {
+export async function parseTestFile(filePath, allowedLanguages = ['console', 'cliscore']) {
   const content = await readFile(filePath, 'utf-8');
-  const ext = filePath.split('.').pop();
+  const ext = extname(filePath).slice(1); // Remove leading dot
 
   let tests;
   if (ext === 't') {
@@ -203,6 +205,47 @@ function parseCodeBlock(content, startLine) {
 }
 
 /**
+ * Parse inline patterns in a line
+ * @param {string} line - Line with potential inline patterns
+ * @returns {OutputExpectation|null} - Parsed expectation or null if no inline patterns
+ */
+function parseInlinePatterns(line) {
+  // Check for inline patterns like: text [Matching: /regex/] more text
+  // BUT: if the entire line is just [Matching: ...], it should be treated as bracketed syntax
+  const inlineRegex = /\[Matching:\s*\/([^\/]+)\/([gimsuvy]*)\]/;
+  const inlineGlobRegex = /\[Matching glob:\s*([^\]]+)\]/;
+
+  // Check if line contains inline patterns
+  const hasInlineRegex = inlineRegex.test(line);
+  const hasInlineGlob = inlineGlobRegex.test(line);
+
+  if (hasInlineRegex || hasInlineGlob) {
+    // Only treat as inline if there's text before or after the pattern
+    // If the entire line is just [Matching: ...], let it fall through to bracketed syntax
+    const trimmed = line.trim();
+    if (trimmed.startsWith('[Matching:') || trimmed.startsWith('[Matching glob:')) {
+      // Check if entire line is just the pattern
+      if (hasInlineRegex) {
+        const match = trimmed.match(/^\[Matching:\s*\/[^\/]+\/[gimsuvy]*\]$/);
+        if (match) return null; // Let bracketed syntax handle it
+      }
+      if (hasInlineGlob) {
+        const match = trimmed.match(/^\[Matching glob:\s*[^\]]+\]$/);
+        if (match) return null; // Let bracketed syntax handle it
+      }
+    }
+
+    return {
+      type: 'inline',
+      pattern: line,
+      isInline: true
+    };
+  }
+
+  return null;
+}
+
+/**
  * Parse output expectations from lines of expected output
  * @param {string[]} lines - Output lines
  * @returns {OutputExpectation[]}
@@ -211,6 +254,12 @@ function parseOutputExpectations(lines) {
   const expectations = [];
 
   for (let line of lines) {
+    // Check for inline patterns first
+    const inlinePattern = parseInlinePatterns(line);
+    if (inlinePattern) {
+      expectations.push(inlinePattern);
+      continue;
+    }
     // Check for UTF format suffixes
     if (line.endsWith(' (re)')) {
       const pattern = line.slice(0, -5);
@@ -233,7 +282,10 @@ function parseOutputExpectations(lines) {
     else if (line.startsWith('[') && line.endsWith(']')) {
       const inside = line.slice(1, -1);
 
-      if (inside.startsWith('stderr:')) {
+      if (inside.startsWith('SKIP:')) {
+        const reason = inside.slice(5).trim();
+        expectations.push({ type: 'skip', reason });
+      } else if (inside.startsWith('stderr:')) {
         const pattern = inside.slice(7).trim();
         expectations.push({ type: 'literal', pattern, stream: 'stderr' });
       } else if (inside.startsWith('Literal text: ')) {

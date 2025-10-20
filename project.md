@@ -13,10 +13,10 @@ Tests look like shell sessions with unnecessary details omitted.
 ### File Formats
 
 - **.t files**: UTF format (two-space indented)
-- **.md files**: Markdown with fenced code blocks (language: `cliscore` by default)
+- **.md files**: Markdown with fenced code blocks (default languages: `console` and `cliscore`)
 - **.cliscore files**: Either format accepted
 
-Configure alternate markdown languages with `--allow-lang <identifier>` (e.g., `shell-session`).
+Additional markdown languages can be configured with `--allow-lang <identifier>`.
 
 ### Test Execution
 
@@ -90,12 +90,12 @@ Multiple test files can run in parallel (`--jobs N` or `--fast`). Tests within a
 Optional `cliscore.sh` in project root:
 
 ```sh
-cliscore_setup() {
+before_each_file() {
     # Runs once at shell start
     export MY_VAR="value"
 }
 
-cliscore_teardown() {
+after_each_file() {
     # Runs once before shell exit
     # cleanup code
 }

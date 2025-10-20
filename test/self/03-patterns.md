@@ -4,7 +4,7 @@ Test all pattern matching capabilities.
 
 ## Regex Patterns
 
-```cliscore
+```console
 $ cliscore fixtures/patterns.md 2>&1 | grep -c "passed"
 1
 ```
@@ -13,7 +13,7 @@ $ cliscore fixtures/patterns.md 2>&1 | grep -c "passed"
 
 The fixture tests regex, glob, and ellipsis:
 
-```cliscore
+```console
 $ cliscore fixtures/patterns.md
 ...
 ✓ All tests passed! (3/3)
@@ -23,7 +23,7 @@ $ cliscore fixtures/patterns.md
 
 Test bracketed syntax directly:
 
-```cliscore
+```console
 $ echo "test123"
 [Matching: /test\d+/]
 $ echo "file.txt"

@@ -71,6 +71,34 @@ describe('Config', () => {
 
       await rm(TEST_DIR, { recursive: true, force: true });
     });
+
+    it('should validate ignoredDirectories is array', async () => {
+      const config = { ignoredDirectories: 'not-an-array' };
+      const configPath = join(TEST_DIR, 'bad-ignored.json');
+      await mkdir(TEST_DIR, { recursive: true });
+      await writeFile(configPath, JSON.stringify(config));
+
+      await assert.rejects(
+        async () => await loadConfig(configPath),
+        /ignoredDirectories must be an array/i
+      );
+
+      await rm(TEST_DIR, { recursive: true, force: true });
+    });
+
+    it('should validate ignoredDirectories contains only strings', async () => {
+      const config = { ignoredDirectories: ['valid', 123, 'also-valid'] };
+      const configPath = join(TEST_DIR, 'bad-ignored-types.json');
+      await mkdir(TEST_DIR, { recursive: true });
+      await writeFile(configPath, JSON.stringify(config));
+
+      await assert.rejects(
+        async () => await loadConfig(configPath),
+        /ignoredDirectories must contain only strings/i
+      );
+
+      await rm(TEST_DIR, { recursive: true, force: true });
+    });
   });
 
   describe('mergeConfig', () => {
@@ -154,6 +182,30 @@ describe('Config', () => {
       const merged = mergeConfig({}, { allowedLanguages: ['cliscore'] });
 
       assert.equal(merged.shell, '/bin/sh');
+    });
+
+    it('should use default ignoredDirectories if not specified', () => {
+      const merged = mergeConfig({}, { allowedLanguages: ['cliscore'] });
+
+      assert.ok(Array.isArray(merged.ignoredDirectories));
+      assert.ok(merged.ignoredDirectories.includes('node_modules'));
+      assert.ok(merged.ignoredDirectories.includes('fixtures'));
+      assert.ok(merged.ignoredDirectories.includes('.git'));
+    });
+
+    it('should apply ignoredDirectories from config', () => {
+      const config = { ignoredDirectories: ['custom_dir', 'another_dir'] };
+      const merged = mergeConfig(config, { allowedLanguages: ['cliscore'] });
+
+      assert.deepEqual(merged.ignoredDirectories, ['custom_dir', 'another_dir']);
+    });
+
+    it('should replace default ignoredDirectories with config', () => {
+      const config = { ignoredDirectories: ['only_this'] };
+      const merged = mergeConfig(config, { allowedLanguages: ['cliscore'] });
+
+      assert.deepEqual(merged.ignoredDirectories, ['only_this']);
+      assert.ok(!merged.ignoredDirectories.includes('node_modules'));
     });
   });
 });

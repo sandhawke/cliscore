@@ -14,7 +14,7 @@ The self-tests use cliscore to run cliscore against test fixtures, verifying tha
 
 ```sh
 # cliscore.sh adds ../../src/ to PATH
-cliscore_setup() {
+before_each_file() {
     export PATH="$(cd ../.. && pwd)/src:$PATH"
 }
 ```

@@ -7,6 +7,7 @@ import { resolve } from 'path';
  * @property {number} [jobs] - Default number of parallel jobs
  * @property {boolean} [fast] - Default to fast mode
  * @property {string} [shell] - Shell to use for executing commands (default: /bin/sh)
+ * @property {string[]} [ignoredDirectories] - Directory names to ignore when searching for tests
  */
 
 /**
@@ -70,6 +71,17 @@ function validateConfig(config) {
   if (config.shell !== undefined && typeof config.shell !== 'string') {
     throw new Error('shell must be a string');
   }
+
+  if (config.ignoredDirectories !== undefined) {
+    if (!Array.isArray(config.ignoredDirectories)) {
+      throw new Error('ignoredDirectories must be an array');
+    }
+    for (const dir of config.ignoredDirectories) {
+      if (typeof dir !== 'string') {
+        throw new Error('ignoredDirectories must contain only strings');
+      }
+    }
+  }
 }
 
 /**
@@ -81,10 +93,24 @@ function validateConfig(config) {
  */
 export function mergeConfig(config, cliOptions) {
   const defaults = {
-    allowedLanguages: ['cliscore'],
+    allowedLanguages: ['console', 'cliscore'],
     jobs: 1,
     fast: false,
-    shell: '/bin/sh'
+    shell: '/bin/sh',
+    ignoredDirectories: [
+      'node_modules',
+      '.git',
+      '.svn',
+      '.hg',
+      'coverage',
+      'dist',
+      'build',
+      '.next',
+      '.nuxt',
+      'out',
+      'vendor',
+      'fixtures'
+    ]
   };
 
   // Start with defaults
@@ -104,11 +130,22 @@ export function mergeConfig(config, cliOptions) {
   if (config.shell !== undefined) {
     merged.shell = config.shell;
   }
+  if (config.ignoredDirectories !== undefined) {
+    // Config file replaces default ignored directories entirely
+    merged.ignoredDirectories = [...config.ignoredDirectories];
+  }
 
   // Apply CLI options (these override everything)
-  if (cliOptions.allowedLanguages && cliOptions.allowedLanguages.length > 1) {
-    // CLI added languages beyond the default - use them
-    merged.allowedLanguages = [...cliOptions.allowedLanguages];
+  // Only override if CLI value is different from defaults
+  // This allows config file to take precedence over default CLI values
+  if (cliOptions.allowedLanguages) {
+    const isDefault = JSON.stringify(cliOptions.allowedLanguages) === JSON.stringify(defaults.allowedLanguages) ||
+                     JSON.stringify(cliOptions.allowedLanguages) === JSON.stringify(['cliscore']); // Legacy default
+
+    // Only apply if user explicitly changed from default via --allow-lang
+    if (!isDefault || !config.allowedLanguages) {
+      merged.allowedLanguages = [...cliOptions.allowedLanguages];
+    }
   }
   if (cliOptions.jobs !== undefined && cliOptions.jobs !== 1) {
     // CLI specified jobs explicitly

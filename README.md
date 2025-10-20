@@ -1,10 +1,14 @@
-# cliscore - Easy-to-read CLI tests!
+# cliscore - Nice CLI testing
 
 A test runner for command-line interfaces, optimized for easy reading. Rhymes with "high score". The hope is you will be able to manually review the test suite guiding your AI coder.
 
 Also, with cliscore, AIs can maybe generate better black-box tests for themselves.
 
-Vibe coded using Claude 4.5, but I put in a fair amount of design work, I swear.
+Vibe coded using Claude 4.5, but I held its hand quite a bit.
+
+**WARNING: cliscore <u>executes the example commands</u> recursively inside the directory where you run it! If there are "console" examples which delete data, alter cloud configurations, email your boss, install a rootkit, etc, running cliscore could be *very bad*!**
+
+**=> This is meant to be run in a sandboxed test environment and/or with trusted code!**
 
 Example [hello-world.md](test/fixtures/hello-world.md)
 
@@ -83,7 +87,7 @@ cliscore --percent --fast
 cliscore --allow-lang shell-session
 ```
 
-By default, cliscore recursively finds all `.t`, `.md`, and `.cliscore` files, automatically ignoring `node_modules/`, `.git/`, and other common directories.
+By default, cliscore recursively finds all `.t`, `.md`, and `.cliscore` files, automatically ignoring common directories (see [Ignored Directories](#ignored-directories) below).
 
 ### Programmatic API
 
@@ -110,24 +114,24 @@ Classic UTF format with two-space indentation:
 
 ### Markdown Format (.md files)
 
-Tests in fenced code blocks (default language identifier: `cliscore`):
+Tests in fenced code blocks (default language identifiers: `console` and `cliscore`):
 
 ````markdown
 # My Test Suite
 
-```cliscore
+```console
 $ echo "hello world"
 hello world
 ```
 ````
 
-If you can be sure all your markdown files with type "console" code blocks are safe to run, then we recommend using that (or whatever gives you good syntax highlighting in your environment) and adding it to your cliscore.json file. Otherwise, just stick to cliscore code blocks or .cliscore files.
+We recommend using `console` as it provides good syntax highlighting in most editors and is widely recognized. The `cliscore` identifier is also supported for backward compatibility.
 
 ### Extended Format (.cliscore files)
 
 Accepts both UTF and markdown formats. Supports enhanced prompts:
 
-```cliscore
+```console
 alice$ echo "user prompt"
 user prompt
 
@@ -144,7 +148,7 @@ In markdown code blocks, tests are separated by command prompts (`$` or `#`), no
 - To separate commands visually, put them in separate code blocks or use comments
 
 Example:
-```cliscore
+```console
 $ printf "line1\n\nline3"
 line1
 
@@ -160,7 +164,7 @@ The first command expects three lines of output (including the blank line).
 
 ### Literal Matching
 
-```cliscore
+```console
 $ echo "exact text"
 exact text
 ```
@@ -168,13 +172,13 @@ exact text
 ### Regular Expressions
 
 UTF style:
-```cliscore
+```console
 $ echo "test123"
 test\d+ (re)
 ```
 
 Enhanced syntax:
-```cliscore
+```console
 $ echo "test123"
 [Matching: /test\d+/]
 ```
@@ -182,20 +186,20 @@ $ echo "test123"
 ### Glob Patterns
 
 UTF style:
-```cliscore
+```console
 $ ls
 file*.txt (glob)
 ```
 
 Enhanced syntax:
-```cliscore
+```console
 $ ls
 [Matching glob: file*.txt]
 ```
 
 ### Ellipsis (Zero or More Lines)
 
-```cliscore
+```console
 $ cat long-file.txt
 first line
 ...
@@ -206,14 +210,14 @@ last line
 
 Match stderr output using `[stderr:]` syntax:
 
-```cliscore
+```console
 $ echo "output" && echo "error" >&2
 output
 [stderr: error]
 ```
 
 Multiple stderr lines:
-```cliscore
+```console
 $ command-with-errors
 normal output
 [stderr: error line 1]
@@ -222,7 +226,7 @@ normal output
 
 ### Special Cases
 
-```cliscore
+```console
 # Literal square brackets
 $ echo "[something]"
 [Literal text: "[something]"]
@@ -240,17 +244,19 @@ Create `cliscore.json` in your project root for default settings:
 {
   "allowedLanguages": ["cliscore", "console", "shellsession", "bash"],
   "jobs": 4,
-  "shell": "/bin/bash"
+  "shell": "/bin/bash",
+  "ignoredDirectories": ["node_modules", ".git", "custom_dir"]
 }
 ```
 
 Priority: CLI arguments > cliscore.json > defaults
 
 Available options:
-- `allowedLanguages`: Array of markdown language identifiers to accept (default: `["cliscore"]`)
+- `allowedLanguages`: Array of markdown language identifiers to accept (default: `["console", "cliscore"]`)
 - `jobs`: Number of test files to run in parallel (default: `1`)
 - `fast`: Enable fast mode with 8 parallel jobs (default: `false`)
 - `shell`: Shell to use for executing commands (default: `"/bin/sh"`)
+- `ignoredDirectories`: Array of directory names to ignore when searching for tests (default: see below)
 
 ## Options
 
@@ -318,28 +324,82 @@ Create a `cliscore.sh` file in your project root to define setup and teardown fu
 ```bash
 #!/bin/sh
 
-# Called once at the start of each test shell
-cliscore_setup() {
+# Optional: Runs before tests start (separate shell)
+run_first() {
+    mkdir -p /tmp/test-workspace
+    echo "Created test workspace"
+}
+
+# Runs once at the start of each test shell
+before_each_file() {
     export TEST_VAR="value"
     export PATH="/custom/path:$PATH"
-    # mkdir -p /tmp/test-workspace
 }
 
-# Called once before the shell exits
-cliscore_teardown() {
-    # rm -rf /tmp/test-workspace
-    true
+# Runs once before the test shell exits (if shell is alive)
+after_each_file() {
+    # Non-critical cleanup
+    unset TEST_VAR
 }
 
-# Define helper functions for tests to use
+# Optional: Runs after all tests (separate shell, always executes)
+run_last() {
+    rm -rf /tmp/test-workspace
+    echo "Cleanup complete"
+}
+
+# Helper functions are available to tests
 test_helper() {
     echo "Helper: $1"
 }
 ```
 
-The file is sourced automatically if present. Setup/teardown functions are invisible (don't appear in test output), but helper functions can be called explicitly in tests.
+**Important**: `after_each_file()` won't run if the shell crashes or times out. Use `run_last()` for critical cleanup that must always happen.
 
-See test/self for an example of this being used to change the path, so one version of cliscore can test another.
+See [SETUP.md](SETUP.md) for detailed documentation on the lifecycle and when to use each function.
+
+## Ignored Directories
+
+When searching for test files with glob patterns (or default search), cliscore automatically ignores the following directories:
+
+**Default ignored directories:**
+- `node_modules` - Node.js packages
+- `.git`, `.svn`, `.hg` - Version control
+- `coverage` - Test coverage reports
+- `dist`, `build`, `out` - Build outputs
+- `.next`, `.nuxt` - Framework build directories
+- `vendor` - Dependency directories
+- `fixtures` - Test fixture data
+- Any directory starting with `.` (hidden directories)
+
+**To customize ignored directories**, add an `ignoredDirectories` array to your `cliscore.json`:
+
+```json
+{
+  "ignoredDirectories": ["node_modules", ".git", "my_custom_ignore"]
+}
+```
+
+**Note:** Setting `ignoredDirectories` in your config **replaces** the default list entirely. If you want to keep the defaults and add more, include them explicitly:
+
+```json
+{
+  "ignoredDirectories": [
+    "node_modules", ".git", ".svn", ".hg",
+    "coverage", "dist", "build", ".next", ".nuxt", "out",
+    "vendor", "fixtures",
+    "my_custom_dir"
+  ]
+}
+```
+
+**To run tests in normally-ignored directories**, specify the file path explicitly:
+
+```bash
+cliscore fixtures/my-test.md
+```
+
+This will work even if `fixtures` is in the ignored list, because explicit paths bypass the search filters.
 
 ## Exit Codes
 

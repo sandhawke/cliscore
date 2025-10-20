@@ -7,7 +7,7 @@ Here we just verify the behavior works end-to-end.
 
 ## Empty Lines Preserved
 
-```cliscore
+```console
 $ printf "line1\n\nline3"
 line1
 
@@ -16,7 +16,7 @@ line3
 
 ## Commands Not Separated by Empty Lines
 
-```cliscore
+```console
 $ echo "first"
 first
 $ echo "second"
