@@ -35,6 +35,7 @@ export class Executor {
     this.timeout = options.timeout || 30; // Timeout in seconds
     this.shellDead = false; // Flag indicating shell was killed
     this.trace = options.trace || false; // Trace mode for I/O logging
+    this.beforeEachFileCalled = false; // Track if before_each_file was called
   }
 
   /**
@@ -46,10 +47,11 @@ export class Executor {
     if (!this.trace) return;
 
     const timestamp = new Date().toISOString().substring(11, 23); // HH:MM:SS.mmm
+    const fileInfo = this.testFilePath ? ` [${this.testFilePath}]` : '';
     const prefix = `[TRACE ${timestamp}]`;
     const lines = message.split('\n');
 
-    console.error(`${prefix} ${type}:`);
+    console.error(`${prefix} ${type}${fileInfo}:`);
     for (const line of lines) {
       console.error(`  ${line}`);
     }
@@ -213,9 +215,6 @@ export class Executor {
       if (this.setupScript) {
         this.traceLog('STDIN', 'Sourcing setup script');
         this.shell.stdin.write(this.setupScript + '\n');
-        this.traceLog('STDIN', 'Calling before_each_file()');
-        // Call before_each_file if defined
-        this.shell.stdin.write('type before_each_file >/dev/null 2>&1 && before_each_file\n');
       }
 
       // Wait a bit for shell to be ready
@@ -223,6 +222,113 @@ export class Executor {
         this.shellReady = true;
         resolve();
       }, 100);
+    });
+  }
+
+  /**
+   * Call before_each_file hook if it exists
+   * Should be called after start() and before any tests are executed
+   * @returns {Promise<{stdout: string[], stderr: string[], exitCode: number, durationMs: number}|null>}
+   */
+  async callBeforeEachFile() {
+    if (!this.shell || !this.shellReady || this.shellDead) {
+      throw new Error('Executor not started. Call start() first.');
+    }
+
+    if (!this.setupScript || this.beforeEachFileCalled) {
+      return null;
+    }
+
+    const startTime = Date.now();
+    this.traceLog('STDIN', 'Calling before_each_file()');
+    this.beforeEachFileCalled = true;
+
+    const marker = this.generateMarker();
+    const stdoutEndMarker = `__CLISCORE_BEFORE_EACH_FILE_STDOUT_${marker}__`;
+    const stderrEndMarker = `__CLISCORE_BEFORE_EACH_FILE_STDERR_${marker}__`;
+
+    return new Promise((resolve) => {
+      const stdoutLines = [];
+      const stderrLines = [];
+      let stdoutBuffer = '';
+      let stderrBuffer = '';
+      let exitCode = null;
+      let stdoutComplete = false;
+      let stderrComplete = false;
+
+      const checkComplete = () => {
+        if (stdoutComplete && stderrComplete) {
+          resolve({
+            stdout: stdoutLines,
+            stderr: stderrLines,
+            exitCode: exitCode ?? 0,
+            durationMs: Date.now() - startTime
+          });
+        }
+      };
+
+      const stdoutHandler = (data) => {
+        const dataStr = data.toString();
+        this.traceLog('STDOUT', dataStr.trimEnd());
+        stdoutBuffer += dataStr;
+
+        const markerRegex = new RegExp(`${stdoutEndMarker}:(\\d+)`);
+        const markerMatch = stdoutBuffer.match(markerRegex);
+
+        if (markerMatch) {
+          const outputBeforeMarker = stdoutBuffer.substring(0, markerMatch.index);
+          if (outputBeforeMarker) {
+            const lines = outputBeforeMarker.split('\n');
+            if (lines[lines.length - 1] === '' && lines.length > 1) {
+              lines.pop();
+            }
+            stdoutLines.push(...lines);
+          }
+          exitCode = parseInt(markerMatch[1], 10);
+          stdoutComplete = true;
+          this.shell.stdout.off('data', stdoutHandler);
+          checkComplete();
+          return;
+        }
+
+        const newlineIndex = stdoutBuffer.lastIndexOf('\n');
+        if (newlineIndex !== -1) {
+          const completeLines = stdoutBuffer.substring(0, newlineIndex);
+          stdoutBuffer = stdoutBuffer.substring(newlineIndex + 1);
+          if (completeLines) {
+            const lines = completeLines.split('\n');
+            stdoutLines.push(...lines);
+          }
+        }
+      };
+
+      const stderrHandler = (data) => {
+        const dataStr = data.toString();
+        this.traceLog('STDERR', dataStr.trimEnd());
+        stderrBuffer += dataStr;
+        const lines = stderrBuffer.split('\n');
+        stderrBuffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.includes(stderrEndMarker)) {
+            stderrComplete = true;
+            this.shell.stderr.off('data', stderrHandler);
+            checkComplete();
+            return;
+          }
+          stderrLines.push(line);
+        }
+      };
+
+      this.shell.stdout.on('data', stdoutHandler);
+      this.shell.stderr.on('data', stderrHandler);
+
+      const command = `type before_each_file >/dev/null 2>&1 && before_each_file
+__EXIT_CODE=$?
+echo "${stdoutEndMarker}:$__EXIT_CODE"
+echo "${stderrEndMarker}" >&2
+`;
+      this.shell.stdin.write(command);
     });
   }
 
@@ -467,27 +573,145 @@ echo "${stderrEndMarker}" >&2
 
   /**
    * Close the shell process
+   * @returns {Promise<{stdout: string[], stderr: string[], exitCode: number, durationMs: number}|null>}
    */
-  close() {
+  async close() {
     if (this.rl) {
       this.rl.close();
       this.rl = null;
     }
 
+    let afterEachFileResult = null;
+
     if (this.shell) {
-      // Call after_each_file if defined
-      if (this.setupScript) {
+      // Call after_each_file only if before_each_file was called
+      if (this.setupScript && this.beforeEachFileCalled && !this.shellDead) {
         try {
-          this.shell.stdin.write('type after_each_file >/dev/null 2>&1 && after_each_file\n');
-        } catch {
-          // Ignore errors during teardown
+          this.traceLog('STDIN', 'Calling after_each_file()');
+
+          const startTime = Date.now();
+          const marker = this.generateMarker();
+          const stdoutEndMarker = `__CLISCORE_AFTER_EACH_FILE_STDOUT_${marker}__`;
+          const stderrEndMarker = `__CLISCORE_AFTER_EACH_FILE_STDERR_${marker}__`;
+
+          afterEachFileResult = await new Promise((resolve) => {
+            const stdoutLines = [];
+            const stderrLines = [];
+            let stdoutBuffer = '';
+            let stderrBuffer = '';
+            let exitCode = null;
+            let stdoutComplete = false;
+            let stderrComplete = false;
+            let timedOut = false;
+
+            const timeout = setTimeout(() => {
+              if (!timedOut) {
+                timedOut = true;
+                this.traceLog('STDERR', 'after_each_file() timed out after 5s');
+                if (this.shell && this.shell.stdout) {
+                  this.shell.stdout.off('data', stdoutHandler);
+                }
+                if (this.shell && this.shell.stderr) {
+                  this.shell.stderr.off('data', stderrHandler);
+                }
+                resolve({
+                  stdout: stdoutLines,
+                  stderr: stderrLines,
+                  exitCode: -1,
+                  durationMs: Date.now() - startTime
+                });
+              }
+            }, 5000); // 5 second timeout for cleanup
+
+            const checkComplete = () => {
+              if (stdoutComplete && stderrComplete && !timedOut) {
+                clearTimeout(timeout);
+                resolve({
+                  stdout: stdoutLines,
+                  stderr: stderrLines,
+                  exitCode: exitCode ?? 0,
+                  durationMs: Date.now() - startTime
+                });
+              }
+            };
+
+            const stdoutHandler = (data) => {
+              const dataStr = data.toString();
+              this.traceLog('STDOUT', dataStr.trimEnd());
+              stdoutBuffer += dataStr;
+
+              const markerRegex = new RegExp(`${stdoutEndMarker}:(\\d+)`);
+              const markerMatch = stdoutBuffer.match(markerRegex);
+
+              if (markerMatch) {
+                const outputBeforeMarker = stdoutBuffer.substring(0, markerMatch.index);
+                if (outputBeforeMarker) {
+                  const lines = outputBeforeMarker.split('\n');
+                  if (lines[lines.length - 1] === '' && lines.length > 1) {
+                    lines.pop();
+                  }
+                  stdoutLines.push(...lines);
+                }
+                exitCode = parseInt(markerMatch[1], 10);
+                stdoutComplete = true;
+                this.shell.stdout.off('data', stdoutHandler);
+                checkComplete();
+                return;
+              }
+
+              const newlineIndex = stdoutBuffer.lastIndexOf('\n');
+              if (newlineIndex !== -1) {
+                const completeLines = stdoutBuffer.substring(0, newlineIndex);
+                stdoutBuffer = stdoutBuffer.substring(newlineIndex + 1);
+                if (completeLines) {
+                  const lines = completeLines.split('\n');
+                  stdoutLines.push(...lines);
+                }
+              }
+            };
+
+            const stderrHandler = (data) => {
+              const dataStr = data.toString();
+              this.traceLog('STDERR', dataStr.trimEnd());
+              stderrBuffer += dataStr;
+              const lines = stderrBuffer.split('\n');
+              stderrBuffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (line.includes(stderrEndMarker)) {
+                  stderrComplete = true;
+                  this.shell.stderr.off('data', stderrHandler);
+                  checkComplete();
+                  return;
+                }
+                stderrLines.push(line);
+              }
+            };
+
+            this.shell.stdout.on('data', stdoutHandler);
+            this.shell.stderr.on('data', stderrHandler);
+
+            // Execute after_each_file and echo markers
+            const command = `type after_each_file >/dev/null 2>&1 && after_each_file
+__EXIT_CODE=$?
+echo "${stdoutEndMarker}:$__EXIT_CODE"
+echo "${stderrEndMarker}" >&2
+`;
+            this.shell.stdin.write(command);
+          });
+        } catch (err) {
+          this.traceLog('ERROR', `Error during after_each_file: ${err.message}`);
+          // Continue with shutdown even if after_each_file fails
         }
       }
+
       this.shell.stdin.end();
       this.shell.kill();
       this.shell = null;
       this.shellReady = false;
     }
+
+    return afterEachFileResult;
   }
 
   /**

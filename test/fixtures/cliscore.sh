@@ -16,12 +16,18 @@ before_each_file() {
 
     # Create temporary directories if needed
     # mkdir -p /tmp/test-workspace
+
+    # Print a message to verify output capture
+    echo "Setting up test environment..."
 }
 
 # Teardown function - runs once at shell end
 after_each_file() {
     # Clean up test environment
     # rm -rf /tmp/test-workspace
+
+    # Print a message to verify output capture
+    echo "Cleaning up test environment..."
     true  # Ensure success even if cleanup fails
 }
 

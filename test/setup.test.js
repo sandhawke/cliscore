@@ -13,6 +13,7 @@ describe('Setup/Teardown', () => {
 
     const executor = new Executor({ setupScript });
     await executor.start();
+    await executor.callBeforeEachFile(); // Call before_each_file to set up TEST_VAR
 
     // Test that setup was called
     const result = await executor.execute({
@@ -23,7 +24,7 @@ describe('Setup/Teardown', () => {
 
     assert.equal(result.stdout[0], 'cliscore_test');
 
-    executor.close();
+    await executor.close();
   });
 
   it('should make helper functions available', async () => {
@@ -43,7 +44,7 @@ describe('Setup/Teardown', () => {
 
     assert.equal(result.stdout[0], 'Helper function called: arg1');
 
-    executor.close();
+    await executor.close();
   });
 
   it('should work without cliscore.sh', async () => {
@@ -58,7 +59,7 @@ describe('Setup/Teardown', () => {
 
     assert.equal(result.stdout[0], 'no setup');
 
-    executor.close();
+    await executor.close();
   });
 
   it('should not fail if functions are not defined', async () => {
@@ -75,6 +76,6 @@ describe('Setup/Teardown', () => {
 
     assert.equal(result.stdout[0], 'test');
 
-    executor.close();
+    await executor.close();
   });
 });

@@ -446,6 +446,7 @@ async function main() {
       trace: options.trace,
       progress: options.progress,
       totalFiles: testFiles.length,
+      json: options.json,
       // Stream output for quiet/default modes (but not debug/trace)
       onFileComplete: (options.verbosity <= 1 && !options.json && !options.percent && !options.debug && !options.trace)
         ? (result, index, total, duration) => {

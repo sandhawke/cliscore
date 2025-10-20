@@ -7,7 +7,7 @@ describe('Executor', () => {
     const executor = new Executor();
     await executor.start();
     assert.equal(executor.shellReady, true);
-    executor.close();
+    await executor.close();
     assert.equal(executor.shell, null);
   });
 
@@ -26,7 +26,7 @@ describe('Executor', () => {
     assert.equal(result.stdout.length, 1);
     assert.equal(result.stdout[0], 'hello');
 
-    executor.close();
+    await executor.close();
   });
 
   it('should capture exit code', async () => {
@@ -42,7 +42,7 @@ describe('Executor', () => {
     assert.equal(result.success, false);
     assert.equal(result.exitCode, 42);
 
-    executor.close();
+    await executor.close();
   });
 
   it('should capture stderr', async () => {
@@ -59,7 +59,7 @@ describe('Executor', () => {
     assert.equal(result.stderr.length, 1);
     assert.equal(result.stderr[0], 'error');
 
-    executor.close();
+    await executor.close();
   });
 
   it('should handle multiline output', async () => {
@@ -78,7 +78,7 @@ describe('Executor', () => {
     assert.equal(result.stdout[1], 'line2');
     assert.equal(result.stdout[2], 'line3');
 
-    executor.close();
+    await executor.close();
   });
 
   it('should handle multiline commands', async () => {
@@ -95,7 +95,7 @@ describe('Executor', () => {
     assert.ok(result.stdout.includes('first'));
     assert.ok(result.stdout.includes('second'));
 
-    executor.close();
+    await executor.close();
   });
 
   it('should execute multiple commands in sequence', async () => {
@@ -115,7 +115,7 @@ describe('Executor', () => {
     assert.equal(results[1].stdout[0], 'test2');
     assert.equal(results[2].stdout[0], 'test3');
 
-    executor.close();
+    await executor.close();
   });
 
   it('should maintain environment between commands', async () => {
@@ -136,7 +136,7 @@ describe('Executor', () => {
 
     assert.equal(result2.stdout[0], 'value');
 
-    executor.close();
+    await executor.close();
   });
 
   it('should handle commands with special characters', async () => {
@@ -152,7 +152,7 @@ describe('Executor', () => {
     assert.equal(result.success, true);
     assert.match(result.stdout[0], /test with.*special.*chars/);
 
-    executor.close();
+    await executor.close();
   });
 
   it('should handle empty output', async () => {
@@ -168,7 +168,7 @@ describe('Executor', () => {
     assert.equal(result.success, true);
     assert.equal(result.stdout.length, 0);
 
-    executor.close();
+    await executor.close();
   });
 
   it('should generate unique markers', () => {

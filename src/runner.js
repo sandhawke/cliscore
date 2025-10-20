@@ -80,15 +80,17 @@ export async function runTestFile(filePath, options = {}) {
         const runFirstResult = await executor.executeInSeparateShell(runFirstScript);
         result.runFirst = runFirstResult;
 
-        // Print run_first output immediately to console
-        if (runFirstResult.stdout && runFirstResult.stdout.length > 0) {
-          for (const line of runFirstResult.stdout) {
-            console.log(line);
+        // Print run_first output immediately to console (unless in JSON mode)
+        if (!options.json) {
+          if (runFirstResult.stdout && runFirstResult.stdout.length > 0) {
+            for (const line of runFirstResult.stdout) {
+              console.log(line);
+            }
           }
-        }
-        if (runFirstResult.stderr && runFirstResult.stderr.length > 0) {
-          for (const line of runFirstResult.stderr) {
-            console.error(line);
+          if (runFirstResult.stderr && runFirstResult.stderr.length > 0) {
+            for (const line of runFirstResult.stderr) {
+              console.error(line);
+            }
           }
         }
 
@@ -106,6 +108,35 @@ export async function runTestFile(filePath, options = {}) {
     }
 
     await executor.start();
+
+    // Only call before_each_file if there are tests to run
+    if (testFile.tests.length > 0) {
+      const beforeEachFileResult = await executor.callBeforeEachFile();
+      if (beforeEachFileResult) {
+        result.beforeEachFile = beforeEachFileResult;
+
+        // Print before_each_file output immediately to console (unless in JSON mode)
+        if (!options.json) {
+          if (beforeEachFileResult.stdout && beforeEachFileResult.stdout.length > 0) {
+            for (const line of beforeEachFileResult.stdout) {
+              console.log(line);
+            }
+          }
+          if (beforeEachFileResult.stderr && beforeEachFileResult.stderr.length > 0) {
+            for (const line of beforeEachFileResult.stderr) {
+              console.error(line);
+            }
+          }
+        }
+
+        // If before_each_file fails with non-zero exit, report warning but continue
+        if (beforeEachFileResult.exitCode !== 0) {
+          if (options.verbosity >= 2) {
+            console.warn(`Warning: before_each_file exited with code ${beforeEachFileResult.exitCode}`);
+          }
+        }
+      }
+    }
 
     for (const test of testFile.tests) {
       const executionResult = await executor.execute(test);
@@ -197,7 +228,31 @@ export async function runTestFile(filePath, options = {}) {
       }
     }
   } finally {
-    executor.close();
+    const afterEachFileResult = await executor.close();
+    if (afterEachFileResult) {
+      result.afterEachFile = afterEachFileResult;
+
+      // Print after_each_file output immediately to console (unless in JSON mode)
+      if (!options.json) {
+        if (afterEachFileResult.stdout && afterEachFileResult.stdout.length > 0) {
+          for (const line of afterEachFileResult.stdout) {
+            console.log(line);
+          }
+        }
+        if (afterEachFileResult.stderr && afterEachFileResult.stderr.length > 0) {
+          for (const line of afterEachFileResult.stderr) {
+            console.error(line);
+          }
+        }
+      }
+
+      // If after_each_file fails with non-zero exit, report warning
+      if (afterEachFileResult.exitCode !== 0) {
+        if (options.verbosity >= 2) {
+          console.warn(`Warning: after_each_file exited with code ${afterEachFileResult.exitCode}`);
+        }
+      }
+    }
 
     // Execute run_last if defined (always runs, even if shell crashed)
     if (executor.setupScript) {
@@ -206,15 +261,17 @@ export async function runTestFile(filePath, options = {}) {
         const runLastResult = await executor.executeInSeparateShell(runLastScript);
         result.runLast = runLastResult;
 
-        // Print run_last output immediately to console
-        if (runLastResult.stdout && runLastResult.stdout.length > 0) {
-          for (const line of runLastResult.stdout) {
-            console.log(line);
+        // Print run_last output immediately to console (unless in JSON mode)
+        if (!options.json) {
+          if (runLastResult.stdout && runLastResult.stdout.length > 0) {
+            for (const line of runLastResult.stdout) {
+              console.log(line);
+            }
           }
-        }
-        if (runLastResult.stderr && runLastResult.stderr.length > 0) {
-          for (const line of runLastResult.stderr) {
-            console.error(line);
+          if (runLastResult.stderr && runLastResult.stderr.length > 0) {
+            for (const line of runLastResult.stderr) {
+              console.error(line);
+            }
           }
         }
 
