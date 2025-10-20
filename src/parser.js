@@ -1,5 +1,5 @@
 import { readFile } from 'fs/promises';
-import { basename } from 'path';
+import { basename, extname } from 'path';
 
 /**
  * @typedef {Object} TestCommand
@@ -32,7 +32,7 @@ import { basename } from 'path';
  */
 export async function parseTestFile(filePath, allowedLanguages = ['console', 'cliscore']) {
   const content = await readFile(filePath, 'utf-8');
-  const ext = filePath.split('.').pop();
+  const ext = extname(filePath).slice(1); // Remove leading dot
 
   let tests;
   if (ext === 't') {

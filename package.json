@@ -14,6 +14,14 @@
     "test:self": "cd test/self; node ../../src/cli.js --fast",
     "test:all": "npm test && npm run test:self && npm run test:examples"
   },
+  "files": [
+    "src/",
+    "README.md",
+    "SETUP.md",
+    "TUTORIAL.md",
+    "STEP_MODE.md",
+    "LICENSE"
+  ],
   "keywords": [
     "testing",
     "cli",

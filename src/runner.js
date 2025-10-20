@@ -50,6 +50,7 @@ export async function runTestFile(filePath, options = {}) {
 
   const testFile = await parseTestFile(filePath, allowedLanguages);
   const executor = new Executor({
+    testFilePath: filePath,
     step: options.step || false,
     shell: options.shell,
     timeout: options.timeout || 30,

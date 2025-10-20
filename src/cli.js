@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 
-import { readdir, stat } from 'fs/promises';
-import { join, resolve } from 'path';
+import { readdir, stat, readFile } from 'fs/promises';
+import { join, resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { parseTestFile } from './parser.js';
 import { runTestFiles, formatResults, getSummary } from './runner.js';
 import { loadConfig, mergeConfig } from './config.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Format duration in milliseconds to human-readable string
@@ -120,6 +124,8 @@ function parseArgs(args) {
       options.debug = true; // trace implies debug
     } else if (arg === '--progress') {
       options.progress = true;
+    } else if (arg === '--version' || arg === '-V') {
+      options.showVersion = true;
     } else if (arg === '--help' || arg === '-h') {
       printHelp();
       process.exit(0);
@@ -132,6 +138,19 @@ function parseArgs(args) {
   }
 
   return options;
+}
+
+/**
+ * Print version information
+ */
+async function printVersion() {
+  try {
+    const packagePath = resolve(__dirname, '../package.json');
+    const packageJson = JSON.parse(await readFile(packagePath, 'utf-8'));
+    console.log(`cliscore v${packageJson.version}`);
+  } catch (error) {
+    console.log('cliscore (version unknown)');
+  }
 }
 
 /**
@@ -162,6 +181,7 @@ Options:
   --debug             Debug mode: show summary of what happened with each test
   --trace             Trace mode: show all I/O events (read/write to shell)
   --progress          Show real-time progress as files complete
+  -V, --version       Show version number
   -h, --help          Show this help message
 
 Test Files:
@@ -346,6 +366,12 @@ async function main() {
 
   // Parse CLI arguments
   const cliOptions = parseArgs(process.argv.slice(2));
+
+  // Handle --version flag
+  if (cliOptions.showVersion) {
+    await printVersion();
+    process.exit(0);
+  }
 
   // Merge config: defaults < cliscore.json < CLI args
   const options = mergeConfig(config, cliOptions);

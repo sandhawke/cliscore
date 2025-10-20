@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import { randomBytes } from 'crypto';
 import { readFile, access } from 'fs/promises';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 import * as readline from 'readline';
 
 /**
@@ -29,6 +29,7 @@ export class Executor {
     this.shellPath = options.shell || '/bin/sh';
     this.shellReady = false;
     this.setupScript = options.setupScript || null;
+    this.testFilePath = options.testFilePath || null; // Path to test file for setup script discovery
     this.stepMode = options.step || false;
     this.rl = null;
     this.timeout = options.timeout || 30; // Timeout in seconds
@@ -56,17 +57,37 @@ export class Executor {
 
   /**
    * Load cliscore.sh setup script if it exists
+   * Searches in order:
+   * 1. Current working directory
+   * 2. Test file's directory (if testFilePath provided)
+   * @param {string} [testFilePath] - Optional path to test file
    * @returns {Promise<string|null>}
    */
-  async loadSetupScript() {
+  async loadSetupScript(testFilePath) {
+    // Try current working directory first
     try {
       const setupPath = resolve(process.cwd(), 'cliscore.sh');
       await access(setupPath);
       const content = await readFile(setupPath, 'utf-8');
       return content;
     } catch {
-      return null;
+      // Fall through to next location
     }
+
+    // Try test file's directory if provided
+    if (testFilePath) {
+      try {
+        const testDir = dirname(resolve(testFilePath));
+        const setupPath = resolve(testDir, 'cliscore.sh');
+        await access(setupPath);
+        const content = await readFile(setupPath, 'utf-8');
+        return content;
+      } catch {
+        // Fall through
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -166,7 +187,7 @@ export class Executor {
   async start() {
     // Load setup script if not already provided
     if (this.setupScript === null) {
-      this.setupScript = await this.loadSetupScript();
+      this.setupScript = await this.loadSetupScript(this.testFilePath);
     }
 
     this.traceLog('SPAWN', `Starting shell: ${this.shellPath}`);
