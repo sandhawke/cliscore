@@ -5,7 +5,7 @@ Write tests that look like shell sessions.
 ## Basic Test (.md file)
 
 ````markdown
-```cliscore
+```console
 $ echo "hello"
 hello
 ```
@@ -16,7 +16,7 @@ Commands start with `$` or `#`. Lines after are expected output.
 ## Multiple Commands
 
 ````markdown
-```cliscore
+```console
 $ echo "first"
 first
 $ echo "second"
@@ -29,7 +29,7 @@ New prompt = new test. No blank lines needed between tests.
 ## Multiline Commands
 
 ````markdown
-```cliscore
+```console
 $ echo "line1" && \
 > echo "line2"
 line1
@@ -41,24 +41,14 @@ Continuation with `> `.
 
 ## Pattern Matching
 
-### Regex
-```cliscore
-$ echo "test123"
-test\d+ (re)
+### Regex (with flags)
+```console
+$ echo "teSt123"
+te[Matching: /st\d+/i]
 ```
-
-Or: `[Matching: /test\d+/i]` with flags.
-
-### Glob
-```cliscore
-$ ls *.txt
-file1.txt (glob)
-```
-
-Or: `[Matching glob: *.txt]`
 
 ### Ellipsis (skip lines)
-```cliscore
+```console
 $ cat file
 first
 ...
@@ -67,7 +57,7 @@ last
 
 ## Stderr
 
-```cliscore
+```console
 $ command 2>&1
 stdout line
 [stderr: error message]
@@ -79,7 +69,7 @@ Stdout and stderr can be interleaved in any order.
 
 Empty lines in output must match exactly:
 
-```cliscore
+```console
 $ printf "a\n\nb"
 a
 
@@ -88,7 +78,7 @@ b
 
 ## Edge Cases
 
-```cliscore
+```console
 $ echo "[literal brackets]"
 [Literal text: "[literal brackets]"]
 
@@ -96,18 +86,9 @@ $ echo -n "no newline"
 no newline (no-eol)
 ```
 
-## UTF Format (.t files)
-
-```
-  $ echo "test"
-  test
-```
-
-Two-space indent for commands (`  $ `) and output (`  `).
-
 ## Setup/Teardown (cliscore.sh)
 
-Optional file in project root:
+Optional file in the directory where cliscore is run:
 
 ```sh
 before_each_file() {
@@ -123,15 +104,16 @@ helper_function() {
 }
 ```
 
-Functions are sourced but invisible (don't appear in output).
+Functions are sourced but their output is discarded.
 
 ## Running Tests
 
 ```bash
 cliscore test.md                    # single file
 cliscore tests/**/*.md              # glob pattern
-cliscore --fast tests/**/*.md       # parallel (8 jobs)
-cliscore --jobs 4 tests/**/*.md     # parallel (4 jobs)
+cliscore --fast tests/**/*.md       # parallel execution
+cliscore --percent                  # run all matching files and just report %
+cliscore --debug / --json / --trace / ...etc
 ```
 
 Exit code 0 = all passed, 1 = failures.

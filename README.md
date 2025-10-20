@@ -1,10 +1,14 @@
-# cliscore - Easy-to-read CLI tests!
+# cliscore - Nice CLI testing
 
 A test runner for command-line interfaces, optimized for easy reading. Rhymes with "high score". The hope is you will be able to manually review the test suite guiding your AI coder.
 
 Also, with cliscore, AIs can maybe generate better black-box tests for themselves.
 
-Vibe coded using Claude 4.5, but I put in a fair amount of design work, I swear.
+Vibe coded using Claude 4.5, but I held its hand quite a bit.
+
+**WARNING: cliscore <u>executes the example commands</u> recursively inside the directory where you run it! If there are "console" examples which delete data, alter cloud configurations, email your boss, install a rootkit, etc, running cliscore could be *very bad*!**
+
+**=> This is meant to be run in a sandboxed test environment and/or with trusted code!**
 
 Example [hello-world.md](test/fixtures/hello-world.md)
 

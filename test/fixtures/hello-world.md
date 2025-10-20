@@ -6,14 +6,14 @@ hello world
 ```
 
 ```console
-$ echo $$
-[Matching: /\d+/]
+$ echo PID is $$
+PID is [Matching: /\d+/]
 ```
 
 ```console
 $ df
 Filesystem     1K-blocks      Used Available Use% Mounted on
 ...
-[Matching: /^tmpfs\s*/]
+tmpfs[Matching: /.*/]/run
 ...
 ```
