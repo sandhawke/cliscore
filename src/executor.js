@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { randomBytes } from 'crypto';
-import { readFile, access } from 'fs/promises';
+import { readFile, access, stat } from 'fs/promises';
 import { resolve, dirname } from 'path';
 import * as readline from 'readline';
 
@@ -59,34 +59,57 @@ export class Executor {
 
   /**
    * Load cliscore.sh setup script if it exists
-   * Searches in order:
-   * 1. Current working directory
-   * 2. Test file's directory (if testFilePath provided)
+   * Searches recursively from test file's directory up to filesystem root.
+   * Security: Only loads scripts owned by the same UID as the test file.
    * @param {string} [testFilePath] - Optional path to test file
    * @returns {Promise<string|null>}
    */
   async loadSetupScript(testFilePath) {
-    // Try current working directory first
-    try {
-      const setupPath = resolve(process.cwd(), 'cliscore.sh');
-      await access(setupPath);
-      const content = await readFile(setupPath, 'utf-8');
-      return content;
-    } catch {
-      // Fall through to next location
+    if (!testFilePath) {
+      return null;
     }
 
-    // Try test file's directory if provided
-    if (testFilePath) {
+    // Get the UID of the test file for security check
+    let testFileUid;
+    try {
+      const testFileStat = await stat(resolve(testFilePath));
+      testFileUid = testFileStat.uid;
+    } catch (err) {
+      // If we can't stat the test file, we can't do security checks
+      console.warn(`Warning: Cannot stat test file ${testFilePath}: ${err.message}`);
+      return null;
+    }
+
+    // Start from the test file's directory and walk up to root
+    let currentDir = dirname(resolve(testFilePath));
+
+    while (true) {
+      const setupPath = resolve(currentDir, 'cliscore.sh');
+
       try {
-        const testDir = dirname(resolve(testFilePath));
-        const setupPath = resolve(testDir, 'cliscore.sh');
         await access(setupPath);
-        const content = await readFile(setupPath, 'utf-8');
-        return content;
+
+        // Check ownership for security
+        const setupStat = await stat(setupPath);
+        if (setupStat.uid !== testFileUid) {
+          console.warn(`Warning: Ignoring ${setupPath} - ownership mismatch (test file uid: ${testFileUid}, setup script uid: ${setupStat.uid})`);
+          // Continue searching up the tree
+        } else {
+          // Found a valid setup script with matching ownership
+          const content = await readFile(setupPath, 'utf-8');
+          return content;
+        }
       } catch {
-        // Fall through
+        // File doesn't exist or can't be accessed, continue up the tree
       }
+
+      // Move to parent directory
+      const parentDir = dirname(currentDir);
+      if (parentDir === currentDir) {
+        // Reached filesystem root
+        break;
+      }
+      currentDir = parentDir;
     }
 
     return null;
