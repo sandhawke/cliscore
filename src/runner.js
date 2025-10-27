@@ -232,18 +232,46 @@ export async function runTestFile(filePath, options = {}) {
           durationMs: executionResult.durationMs
         });
         if (options.step) {
-          const action = await executor.promptAfterFailure(matchResult, executionResult.stdout, executionResult.stderr);
-          if (action === 'run') {
-            // Switch to run mode
-            executor.stepMode = false;
-            options.step = false;
-          } else if (action === 'next') {
-            // Skip to next file
-            break;
-          } else if (action === 'quit') {
-            process.exit(1);
+          // Display failure details in step mode
+          console.log('  ' + style.brightRed('✗ FAILED'));
+          console.log();
+
+          // Show the error message
+          console.log(style.dim('---error---'));
+          const errorLines = (matchResult.error || 'Unknown error').split('\n');
+          errorLines.forEach(line => {
+            console.log(style.red(line));
+          });
+          console.log(style.dim('---error---'));
+          console.log();
+
+          // Show actual output if available
+          if (executionResult.stdout && executionResult.stdout.length > 0) {
+            console.log(style.dim('Actual stdout:'));
+            console.log(style.dim('---actual-output---'));
+            executionResult.stdout.slice(0, 30).forEach(line => {
+              console.log(style.gray(line));
+            });
+            if (executionResult.stdout.length > 30) {
+              console.log(style.dim(`... (${executionResult.stdout.length - 30} more lines)`));
+            }
+            console.log(style.dim('---end-of-output---'));
+            console.log();
           }
-          // 'step' means continue stepping
+
+          // Show actual stderr if available
+          if (executionResult.stderr && executionResult.stderr.length > 0) {
+            console.log(style.dim('Actual stderr:'));
+            console.log(style.dim('---actual-output---'));
+            executionResult.stderr.slice(0, 30).forEach(line => {
+              console.log(style.gray(line));
+            });
+            if (executionResult.stderr.length > 30) {
+              console.log(style.dim(`... (${executionResult.stderr.length - 30} more lines)`));
+            }
+            console.log(style.dim('---end-of-output---'));
+            console.log();
+          }
         }
       }
     }
