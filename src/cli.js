@@ -63,6 +63,7 @@ function parseArgs(args) {
       options.step = false;
     } else if (arg === '--percent') {
       options.percent = true;
+      options.step = false; // --percent implies --run
     } else if (arg === '--quiet' || arg === '-q') {
       options.verbosity = 0;
     } else if (arg === '--verbose' || arg === '-v') {
@@ -73,6 +74,7 @@ function parseArgs(args) {
       options.verbosity = 4;
     } else if (arg === '--fast') {
       options.jobs = 8;
+      options.step = false; // --fast implies --run
     } else if (arg === '--jobs' || arg === '-j') {
       if (i + 1 >= args.length) {
         console.error('Error: --jobs requires a number');

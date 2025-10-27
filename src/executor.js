@@ -238,16 +238,16 @@ export class Executor {
 
     // Display expected output pattern
     if (expectedOutput && expectedOutput.length > 0) {
-      console.log('  ' + style.dim('---expected-output---'));
+      console.log(style.dim('---expected-output---'));
       const formattedOutput = this.formatExpectedOutput(expectedOutput);
       const maxLines = 20; // Limit display to 20 lines
       formattedOutput.slice(0, maxLines).forEach(line => {
-        console.log('  ' + style.dim(line));
+        console.log(style.dim(line));
       });
       if (formattedOutput.length > maxLines) {
-        console.log('  ' + style.dim(`... (${formattedOutput.length - maxLines} more lines)`));
+        console.log(style.dim(`... (${formattedOutput.length - maxLines} more lines)`));
       }
-      console.log('  ' + style.dim('---end-of-expected---'));
+      console.log(style.dim('---end-of-expected---'));
       console.log();
     }
 
