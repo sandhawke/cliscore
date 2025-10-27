@@ -152,6 +152,51 @@ export class Executor {
   }
 
   /**
+   * Format expected output patterns for display
+   * @param {Array} expectedOutput - Array of output expectations
+   * @returns {string[]} - Formatted lines to display
+   */
+  formatExpectedOutput(expectedOutput) {
+    const lines = [];
+
+    for (const expectation of expectedOutput) {
+      const stream = expectation.stream === 'stderr' ? '[stderr] ' : '';
+
+      switch (expectation.type) {
+        case 'literal':
+          lines.push(`${stream}${expectation.pattern}`);
+          break;
+        case 'regex':
+          const flags = expectation.flags ? expectation.flags : '';
+          lines.push(`${stream}[Matching: /${expectation.pattern}/${flags}]`);
+          break;
+        case 'glob':
+          lines.push(`${stream}[Matching glob: ${expectation.pattern}]`);
+          break;
+        case 'ellipsis':
+          lines.push('...');
+          break;
+        case 'no-eol':
+          lines.push(`${expectation.pattern} (no-eol)`);
+          break;
+        case 'skip':
+          lines.push(`[SKIP: ${expectation.reason}]`);
+          break;
+        case 'inline':
+          lines.push(expectation.pattern);
+          break;
+        case 'stderr':
+          lines.push(`[stderr: ${expectation.pattern}]`);
+          break;
+        default:
+          lines.push(`[Unknown expectation type: ${expectation.type}]`);
+      }
+    }
+
+    return lines;
+  }
+
+  /**
    * Prompt user for action in step mode
    * @param {TestCommand} testCommand - The test command to show
    * @returns {Promise<'step'|'run'|'pass'|'fail'|'next'|'quit'>}
@@ -161,7 +206,7 @@ export class Executor {
       return 'step';
     }
 
-    const { command, lineNumber } = testCommand;
+    const { command, lineNumber, expectedOutput } = testCommand;
     const fileName = this.testFilePath ? basename(this.testFilePath) : 'test';
 
     // Display section divider
@@ -190,6 +235,22 @@ export class Executor {
       }
     }
     console.log();
+
+    // Display expected output pattern
+    if (expectedOutput && expectedOutput.length > 0) {
+      console.log('  ' + style.dim('---expected-output---'));
+      const formattedOutput = this.formatExpectedOutput(expectedOutput);
+      const maxLines = 20; // Limit display to 20 lines
+      formattedOutput.slice(0, maxLines).forEach(line => {
+        console.log('  ' + style.dim(line));
+      });
+      if (formattedOutput.length > maxLines) {
+        console.log('  ' + style.dim(`... (${formattedOutput.length - maxLines} more lines)`));
+      }
+      console.log('  ' + style.dim('---end-of-expected---'));
+      console.log();
+    }
+
     console.log('  ' + line(76, '─', 'dim'));
     console.log();
 
@@ -516,10 +577,12 @@ echo "${stderrEndMarker}" >&2
     }
 
     const { command } = testCommand;
-    const startTime = Date.now();
 
     // In step mode, ask for action
     const action = await this.promptStep(testCommand);
+
+    // Start timing after the prompt, not including user wait time
+    const startTime = Date.now();
     if (action === 'pass') {
       return {
         success: true,
@@ -670,6 +733,13 @@ echo "${stderrEndMarker}" >&2
               lines.pop();
             }
             stdoutLines.push(...lines);
+
+            // In step mode, display final lines in real-time
+            if (this.stepMode && lines.length > 0) {
+              lines.forEach(line => {
+                console.log(style.gray(line));
+              });
+            }
           }
 
           exitCode = parseInt(markerMatch[1], 10);

@@ -146,10 +146,19 @@ function matchSingleLine(actualLine, expectation) {
 
       // Build regex by replacing inline patterns with their regex equivalents
       let regexPattern = pattern;
+      let regexFlags = '';
 
       // Replace [Matching: /regex/flags] with captured group
+      // Also extract flags to apply to the entire pattern
       regexPattern = regexPattern.replace(/\[Matching:\s*\/([^\/]+)\/([gimsuvy]*)\]/g, (match, regex, flags) => {
-        // For inline matching, we ignore flags for simplicity and just use the pattern
+        // Collect all flags from inline patterns
+        if (flags) {
+          for (const flag of flags) {
+            if (!regexFlags.includes(flag)) {
+              regexFlags += flag;
+            }
+          }
+        }
         return `(${regex})`;
       });
 
@@ -179,7 +188,7 @@ function matchSingleLine(actualLine, expectation) {
 
       // Try to match
       try {
-        const regex = new RegExp(`^${regexPattern}$`);
+        const regex = new RegExp(`^${regexPattern}$`, regexFlags);
         if (regex.test(actualLine)) {
           return { success: true };
         }
@@ -340,6 +349,12 @@ function formatExpectation(expectation) {
       return expectation.pattern
         ? `${expectation.pattern} (no-eol)`
         : '(no-eol)';
+    case 'inline':
+      return expectation.pattern;
+    case 'skip':
+      return `[SKIP: ${expectation.reason}]`;
+    case 'stderr':
+      return `[stderr: ${expectation.pattern}]`;
     default:
       return String(expectation);
   }
