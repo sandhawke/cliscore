@@ -52,7 +52,7 @@ te[Matching: /st\d+/i]
 $ printf "first\nsecond\nthird\nlast"
 first
 ...
-last
+las
 ```
 
 ## Stderr
