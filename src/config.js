@@ -154,6 +154,9 @@ export function mergeConfig(config, cliOptions) {
   if (cliOptions.shell !== undefined) {
     merged.shell = cliOptions.shell;
   }
+  if (cliOptions.saveDir !== undefined && cliOptions.saveDir !== null) {
+    merged.saveDir = cliOptions.saveDir;
+  }
 
   return merged;
 }

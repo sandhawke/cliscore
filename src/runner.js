@@ -2,6 +2,8 @@ import { parseTestFile } from './parser.js';
 import { Executor } from './executor.js';
 import { matchOutput } from './matcher.js';
 import { style } from './colors.js';
+import { mkdirSync, writeFileSync } from 'fs';
+import { basename, join } from 'path';
 
 /**
  * @typedef {Object} TestResult
@@ -155,6 +157,21 @@ export async function runTestFile(filePath, options = {}) {
           durationMs: executionResult.durationMs
         });
 
+        // Save test result if saveDir is specified
+        if (options.saveDir) {
+          saveTestResult(options.saveDir, ++options.testCounter, filePath, {
+            command: test.command,
+            lineNumber: test.lineNumber,
+            expectedOutput: test.expectedOutput,
+            success: false,
+            error: executionResult.error,
+            exitCode: executionResult.exitCode,
+            stdout: executionResult.stdout || [],
+            stderr: executionResult.stderr || [],
+            durationMs: executionResult.durationMs
+          });
+        }
+
         // If shell died, remaining tests will also fail
         if (executionResult.error.includes('Shell died') || executionResult.error.includes('Timeout')) {
           // Continue to process remaining tests - they will all get "Shell died" errors
@@ -171,6 +188,24 @@ export async function runTestFile(filePath, options = {}) {
       if (executionResult.skipped) {
         if (executionResult.success) {
           result.passed++;
+
+          // Save test result if saveDir is specified
+          if (options.saveDir) {
+            saveTestResult(options.saveDir, ++options.testCounter, filePath, {
+              command: test.command,
+              lineNumber: test.lineNumber,
+              expectedOutput: test.expectedOutput,
+              success: true,
+              error: null,
+              exitCode: executionResult.exitCode,
+              stdout: executionResult.stdout || [],
+              stderr: executionResult.stderr || [],
+              durationMs: executionResult.durationMs,
+              skipped: true,
+              skipReason: executionResult.skipReason
+            });
+          }
+
           if (options.step) {
             console.log('✓ Test marked as PASS (skipped)');
           }
@@ -185,6 +220,24 @@ export async function runTestFile(filePath, options = {}) {
             actualStderr: executionResult.stderr,
             durationMs: executionResult.durationMs
           });
+
+          // Save test result if saveDir is specified
+          if (options.saveDir) {
+            saveTestResult(options.saveDir, ++options.testCounter, filePath, {
+              command: test.command,
+              lineNumber: test.lineNumber,
+              expectedOutput: test.expectedOutput,
+              success: false,
+              error: executionResult.skipReason || 'Skipped by user',
+              exitCode: executionResult.exitCode,
+              stdout: executionResult.stdout || [],
+              stderr: executionResult.stderr || [],
+              durationMs: executionResult.durationMs,
+              skipped: true,
+              skipReason: executionResult.skipReason
+            });
+          }
+
           if (options.step) {
             console.log('✗ Test marked as FAIL (skipped)');
           }
@@ -205,6 +258,24 @@ export async function runTestFile(filePath, options = {}) {
           lineNumber: test.lineNumber,
           reason: matchResult.skipReason || 'No reason provided'
         });
+
+        // Save test result if saveDir is specified
+        if (options.saveDir) {
+          saveTestResult(options.saveDir, ++options.testCounter, filePath, {
+            command: test.command,
+            lineNumber: test.lineNumber,
+            expectedOutput: test.expectedOutput,
+            success: true,
+            error: null,
+            exitCode: executionResult.exitCode,
+            stdout: executionResult.stdout || [],
+            stderr: executionResult.stderr || [],
+            durationMs: executionResult.durationMs,
+            skipped: true,
+            skipReason: matchResult.skipReason
+          });
+        }
+
         if (options.step) {
           console.log('  ' + style.yellow(`⊘ SKIPPED: ${matchResult.skipReason}`));
           console.log();
@@ -216,6 +287,22 @@ export async function runTestFile(filePath, options = {}) {
           lineNumber: test.lineNumber,
           durationMs: executionResult.durationMs
         });
+
+        // Save test result if saveDir is specified
+        if (options.saveDir) {
+          saveTestResult(options.saveDir, ++options.testCounter, filePath, {
+            command: test.command,
+            lineNumber: test.lineNumber,
+            expectedOutput: test.expectedOutput,
+            success: true,
+            error: null,
+            exitCode: executionResult.exitCode,
+            stdout: executionResult.stdout || [],
+            stderr: executionResult.stderr || [],
+            durationMs: executionResult.durationMs
+          });
+        }
+
         if (options.step) {
           console.log('  ' + style.brightGreen('✓ PASSED'));
           console.log();
@@ -231,6 +318,22 @@ export async function runTestFile(filePath, options = {}) {
           actualStderr: executionResult.stderr,
           durationMs: executionResult.durationMs
         });
+
+        // Save test result if saveDir is specified
+        if (options.saveDir) {
+          saveTestResult(options.saveDir, ++options.testCounter, filePath, {
+            command: test.command,
+            lineNumber: test.lineNumber,
+            expectedOutput: test.expectedOutput,
+            success: false,
+            error: matchResult.error || 'Unknown error',
+            exitCode: executionResult.exitCode,
+            stdout: executionResult.stdout || [],
+            stderr: executionResult.stderr || [],
+            durationMs: executionResult.durationMs
+          });
+        }
+
         if (options.step) {
           // Display failure details in step mode
           console.log('  ' + style.brightRed('✗ FAILED'));
@@ -353,6 +456,20 @@ export async function runTestFile(filePath, options = {}) {
 export async function runTestFiles(filePaths, options = {}) {
   const jobs = options.jobs || 1;
   const totalFiles = options.totalFiles || filePaths.length;
+
+  // Setup save directory if requested
+  if (options.saveDir) {
+    try {
+      mkdirSync(options.saveDir, { recursive: true });
+      console.log(`Saving test results to: ${options.saveDir}`);
+    } catch (err) {
+      console.error(`Error creating save directory: ${err.message}`);
+      process.exit(1);
+    }
+  }
+
+  // Global test counter for unique filenames (stored in options to pass through)
+  options.testCounter = 0;
 
   if (jobs === 1) {
     // Sequential execution
@@ -948,6 +1065,43 @@ function formatExpectedOutput(expectedOutput) {
   }
 
   return lines;
+}
+
+/**
+ * Save test result details to files
+ * @param {string} saveDir - Directory to save to
+ * @param {number} testNum - Test number (global counter)
+ * @param {string} filePath - Source test file path
+ * @param {Object} testData - Test data (command, expected, actual, etc.)
+ */
+function saveTestResult(saveDir, testNum, filePath, testData) {
+  const prefix = `test-${String(testNum).padStart(4, '0')}`;
+
+  // Save metadata
+  const metadata = {
+    testNumber: testNum,
+    file: filePath,
+    lineNumber: testData.lineNumber,
+    command: testData.command,
+    expectedOutput: testData.expectedOutput,
+    success: testData.success,
+    error: testData.error || null,
+    exitCode: testData.exitCode,
+    durationMs: testData.durationMs,
+    skipped: testData.skipped || false,
+    skipReason: testData.skipReason || null
+  };
+  writeFileSync(join(saveDir, `${prefix}-metadata.json`), JSON.stringify(metadata, null, 2));
+
+  // Save stdout
+  if (testData.stdout && testData.stdout.length > 0) {
+    writeFileSync(join(saveDir, `${prefix}-stdout.txt`), testData.stdout.join('\n'));
+  }
+
+  // Save stderr
+  if (testData.stderr && testData.stderr.length > 0) {
+    writeFileSync(join(saveDir, `${prefix}-stderr.txt`), testData.stderr.join('\n'));
+  }
 }
 
 /**

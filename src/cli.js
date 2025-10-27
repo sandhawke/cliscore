@@ -47,7 +47,8 @@ function parseArgs(args) {
     timeout: 30, // Timeout in seconds per test (default: 30)
     debug: false, // Debug mode: show test summaries
     trace: false, // Trace mode: show all I/O events
-    progress: false // Progress mode: show real-time progress
+    progress: false, // Progress mode: show real-time progress
+    saveDir: null // Directory to save detailed test results
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -128,6 +129,14 @@ function parseArgs(args) {
       options.debug = true; // trace implies debug
     } else if (arg === '--progress') {
       options.progress = true;
+    } else if (arg.startsWith('--save=')) {
+      options.saveDir = arg.slice(7);
+    } else if (arg === '--save') {
+      if (i + 1 >= args.length) {
+        console.error('Error: --save requires a directory path');
+        process.exit(1);
+      }
+      options.saveDir = args[++i];
     } else if (arg === '--version' || arg === '-V') {
       options.showVersion = true;
     } else if (arg === '--help' || arg === '-h') {
@@ -183,6 +192,7 @@ Options:
   --shell <path>      Shell to use for executing commands (default: /bin/sh)
   --show N            Show details for first N failures (default: 1, use "all" or -1 for all)
   --timeout N         Timeout in seconds per test (default: 30)
+  --save <dir>        Save detailed test results to directory (creates if needed)
   --debug             Debug mode: show summary of what happened with each test
   --trace             Trace mode: show all I/O events (read/write to shell)
   --progress          Show real-time progress as files complete
@@ -451,6 +461,7 @@ async function main() {
       progress: options.progress,
       totalFiles: testFiles.length,
       json: options.json,
+      saveDir: options.saveDir,
       // Stream output for quiet/default modes (but not debug/trace)
       onFileComplete: (options.verbosity <= 1 && !options.json && !options.percent && !options.debug && !options.trace)
         ? (result, index, total, duration) => {
