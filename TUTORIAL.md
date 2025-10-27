@@ -49,7 +49,7 @@ te[Matching: /st\d+/i]
 
 ### Ellipsis (skip lines)
 ```console
-$ cat file
+$ printf "first\nsecond\nthird\nlast"
 first
 ...
 last
@@ -58,7 +58,7 @@ last
 ## Stderr
 
 ```console
-$ command 2>&1
+$ (echo stdout line); (echo "error message" 1>&2)
 stdout line
 [stderr: error message]
 ```
@@ -81,7 +81,6 @@ b
 ```console
 $ echo "[literal brackets]"
 [Literal text: "[literal brackets]"]
-
 $ echo -n "no newline"
 no newline (no-eol)
 ```
@@ -111,7 +110,8 @@ Functions are sourced but their output is discarded.
 ```bash
 cliscore test.md                    # single file
 cliscore tests/**/*.md              # glob pattern
-cliscore --fast tests/**/*.md       # parallel execution
+cliscore --run                      # non-interactive
+cliscore --fast tests/**/*.md       # parallel execution run mode
 cliscore --percent                  # run all matching files and just report %
 cliscore --debug / --json / --trace / ...etc
 ```
