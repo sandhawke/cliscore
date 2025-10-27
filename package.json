@@ -10,7 +10,7 @@
   "scripts": {
     "test": "node --test test/**/*.test.js",
     "test:cov": "node --experimental-test-coverage --test test/**/*.test.js",
-    "test:examples": "node src/cli.js test/fixtures/example.t test/fixtures/example.md",
+    "test:examples": "node src/cli.js --run test/fixtures/example.t test/fixtures/example.md",
     "test:self": "cd test/self; node ../../src/cli.js --fast",
     "test:all": "npm test && npm run test:self && npm run test:examples"
   },
