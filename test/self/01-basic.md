@@ -14,7 +14,7 @@ $ cliscore --run fixtures/basic.md
 
 ```console
 $ cliscore --run --help | grep "Usage:"
-Usage: cliscore [options] <test-files...>
+Usage: cliscore [options] [test-files...]
 ```
 
 ## Version Info

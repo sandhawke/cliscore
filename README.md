@@ -35,7 +35,7 @@ Filesystem     1K-blocks      Used Available Use% Mounted on
 ````
 
 ```console
-$ cliscore hello-world.md
+$ cliscore --run hello-world.md
 ✓ /home/sandro/src/cliscore/test/fixtures/hello-world.md: 100.0% (3/3)
 ✓ All tests passed! (3/3)
 ```
@@ -44,6 +44,7 @@ $ cliscore hello-world.md
 
 - **Multiple file formats**: Supports `.t` (UTF), `.md` (markdown), and `.cliscore` files
 - **Markdown integration**: Extract tests from fenced code blocks in markdown files
+- **Two modes**: Interactive step mode (default) for writing tests, automated run mode for CI/CD
 - **Flexible output matching**:
   - Literal text matching
   - Regular expressions with flags
@@ -52,7 +53,60 @@ $ cliscore hello-world.md
   - No-EOL handling
 - **Human-readable syntax**: Special matching syntax that makes sense to readers
 - **Parallel test execution**: Tests can be run concurrently
+- **Detailed results**: Save test metadata, stdout, and stderr to files with `--save`
 - **JSON output**: Machine-readable output for CI/CD integration
+
+## Modes
+
+### Step Mode (Default - Interactive)
+
+**Best for:** Writing and debugging tests
+
+By default, cliscore runs in **step mode** - it prompts you before each test:
+
+```console
+$ cliscore tests/example.md
+
+═════════════════════════════════  STEP MODE  ══════════════════════════════════
+
+  example.md:5
+
+  $ echo "hello"
+
+  ---expected-output---
+  hello
+  ---end-of-expected---
+
+  ────────────────────────────────────────────────────────────────────────────
+
+  ▶ (s)tep, (r)un, skip as (p)ass, skip as (f)ail, (n)ext file, (q)uit? [s/r/p/f/n/q]
+```
+
+You see:
+- The command that will run
+- The expected output pattern
+- Options: (s)tep to run it, (r)un all remaining, (p)ass/(f)ail to skip, (n)ext file, (q)uit
+
+After running, you see the actual output and whether it passed or failed, then automatically move to the next test.
+
+### Run Mode (Automated)
+
+**Best for:** CI/CD, running test suites, automation
+
+Use `--run` to execute all tests without prompting:
+
+```console
+$ cliscore --run tests/**/*.md
+✓ tests/basic.md: 100.0% (5/5)
+✓ tests/advanced.md: 80.0% (4/5)
+✗ 1 test failed, 9 passed (90.0% pass rate)
+```
+
+Add `--fast` to run test files in parallel (8 jobs):
+
+```console
+$ cliscore --run --fast tests/**/*.md
+```
 
 ## Installation
 
@@ -62,32 +116,51 @@ npm install cliscore
 
 ## Usage
 
-### Command Line
+### Quick Start
 
 ```bash
-# Run all tests (default: **/*.{t,md,cliscore})
-cliscore
+# Interactive mode - step through tests one by one (DEFAULT)
+cliscore tests/example.md
 
-# Run a single test file, single-step mode
-cliscore tests/basic.t --step
+# Automated mode - run all tests without prompts
+cliscore --run tests/**/*.md
 
-# Run multiple files with glob patterns, highly verbose
-cliscore tests/**/*.md -vv
+# Fast parallel execution for CI/CD
+cliscore --run --fast tests/**/*.md
+
+# Find and run all tests in current directory (default: **/*.{t,md,cliscore})
+cliscore --run
+```
+
+By default, cliscore recursively finds all `.t`, `.md`, and `.cliscore` files, automatically ignoring common directories (see [Ignored Directories](#ignored-directories) below).
+
+### Common Use Cases
+
+```bash
+# Write/debug tests interactively (step mode is default)
+cliscore tests/new-feature.md
+
+# Run in CI/CD
+cliscore --run --fast
+
+# Save detailed test results for analysis
+TEST_DIR=$(mktemp -d) && cliscore --run --save=$TEST_DIR tests/**/*.md
+
+# Get just the pass percentage for scripts
+cliscore --run --percent tests/**/*.md
 
 # Dry run (parse without executing)
 cliscore --dry-run tests/example.md
 
-# JSON output
-cliscore --json
+# JSON output for tooling
+cliscore --run --json tests/**/*.md
 
-# Just the pass-percentage output, parallel runs
-cliscore --percent --fast
+# Show verbose failure details
+cliscore --run -v tests/**/*.md
 
 # Allow additional markdown language identifiers
-cliscore --allow-lang shell-session
+cliscore --run --allow-lang shell-session tests/**/*.md
 ```
-
-By default, cliscore recursively finds all `.t`, `.md`, and `.cliscore` files, automatically ignoring common directories (see [Ignored Directories](#ignored-directories) below).
 
 ### Programmatic API
 
@@ -260,18 +333,44 @@ Available options:
 
 ## Options
 
-- `--json`: Output results as JSON
+### Execution Modes
+- **(default)**: Interactive step mode - prompt before each test, show output after
+- `--run`: Non-interactive - run all tests without stopping
 - `--dry-run`: Parse tests without executing them
-- `--step`: Interactive mode - prompt before each command, show output after
+
+### Output Formats
+- `--json`: Output results as JSON (machine-readable)
 - `--percent`: Output only pass percentage (e.g., "95.5")
-- `-q`, `--quiet`: Quiet mode - one line per file with pass rate
-- `-v`, `--verbose`: Verbose mode - show all tests (one line per test)
-- `-vv`: Very verbose - show all tests with full error details
+
+### Verbosity (for --run mode)
+- `-q`, `--quiet`: Quiet - only summary line
+- (default): One line per file with pass rate
+- `-v`, `--verbose`: Show failures with details
+- `-vv`: Show all tests (one line per test)
+- `-vvv`: Show all tests with full error details
+
+### Performance
 - `--jobs N`, `-j N`: Run N test files in parallel (default: 1)
-- `--fast`: Run tests in parallel with 8 jobs (equivalent to --jobs 8)
-- `--allow-lang <lang>`: Allow additional markdown language identifiers
-- `--shell <path>`: Shell to use for executing commands (default: /bin/sh)
-- `--help`, `-h`: Show help message
+- `--fast`: Run tests in parallel with 8 jobs (equivalent to `--jobs 8`)
+- Note: `--fast` and `--percent` automatically enable `--run` mode
+
+### Test Results
+- `--save <dir>`: Save detailed test results to directory (metadata.json, stdout.txt, stderr.txt)
+- `--show N`: Show details for first N failures (default: 1, use `all` or `-1` for all)
+
+### Test Selection
+- `--allow-lang <lang>`: Allow additional markdown language identifier (can be used multiple times)
+- `--shell <path>`: Shell to use for executing commands (default: `/bin/sh`)
+- `--timeout N`: Timeout in seconds per test (default: 30)
+
+### Debugging
+- `--debug`: Debug mode - show summary of what happened with each test
+- `--trace`: Trace mode - show all I/O events (read/write to shell)
+- `--progress`: Show real-time progress as files complete
+
+### Help
+- `-h`, `--help`: Show help message
+- `-V`, `--version`: Show version number
 
 ## Output Verbosity
 

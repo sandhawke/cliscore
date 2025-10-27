@@ -173,43 +173,55 @@ function printHelp() {
   console.log(`
 cliscore - A test runner for command-line interfaces
 
-Usage: cliscore [options] <test-files...>
+Usage: cliscore [options] [test-files...]
 
-Options:
-  --json              Output results as JSON
-  --dry-run           Parse tests but don't execute them
-  (default)           Interactive step mode: prompt before each test, show output
-  --run               Non-interactive: run all tests without stopping
-  --percent           Output only the pass percentage (e.g., "95.5")
-  -q, --quiet         Quiet: only summary line
-  (default)           One line per file with pass rate
+MODES:
+  (default)           Interactive step mode - prompt before each test
+  --run               Automated mode - run all tests without prompting
+  --dry-run           Parse tests without executing
+
+OUTPUT:
+  --json              JSON format (machine-readable)
+  --percent           Only pass percentage (e.g., "95.5")
+  -q, --quiet         Only summary line
+  (default)           One line per file
   -v, --verbose       Show failures with details
-  -vv                 Show all tests (one line per test)
-  -vvv                Show all tests with full error details
-  --jobs N, -j N      Run N test files in parallel (default: 1)
-  --fast              Run tests in parallel with 8 jobs (equivalent to --jobs 8)
-  --allow-lang <lang> Allow additional markdown language identifier (can be used multiple times)
-  --shell <path>      Shell to use for executing commands (default: /bin/sh)
-  --show N            Show details for first N failures (default: 1, use "all" or -1 for all)
-  --timeout N         Timeout in seconds per test (default: 30)
-  --save <dir>        Save detailed test results to directory (creates if needed)
-  --debug             Debug mode: show summary of what happened with each test
-  --trace             Trace mode: show all I/O events (read/write to shell)
-  --progress          Show real-time progress as files complete
-  -V, --version       Show version number
-  -h, --help          Show this help message
+  -vv                 Show all tests
+  -vvv                Show all tests with full details
 
-Test Files:
-  Supports .t (UTF format), .md (markdown with code blocks), and .cliscore files.
-  Glob patterns are supported (e.g., tests/**/*.md)
+PERFORMANCE:
+  --fast              Parallel execution with 8 jobs (implies --run)
+  --jobs N, -j N      Run N test files in parallel
 
-Examples:
-  cliscore tests/basic.t                                 (interactive step mode)
-  cliscore --run tests/**/*.md                          (non-interactive)
-  cliscore --run --fast tests/**/*.md                   (parallel non-interactive)
-  cliscore --run --jobs 4 tests/**/*.t                  (4 parallel jobs)
-  cliscore --json --dry-run tests/example.md
-  cliscore --allow-lang shell-session tests/**/*.md
+RESULTS:
+  --save <dir>        Save detailed results (metadata.json, stdout.txt, stderr.txt)
+  --show N            Show N failures in detail (default: 1, use 'all' for all)
+
+TEST CONFIGURATION:
+  --timeout N         Timeout per test in seconds (default: 30)
+  --shell <path>      Shell to use (default: /bin/sh)
+  --allow-lang <lang> Allow additional markdown language (e.g., shell-session)
+
+DEBUGGING:
+  --debug             Show test summaries
+  --trace             Show all I/O events
+  --progress          Show real-time progress
+
+HELP:
+  -h, --help          Show this help
+  -V, --version       Show version
+
+FILES:
+  Supports .t (UTF), .md (markdown), and .cliscore files
+  Default: recursively finds **/*.{t,md,cliscore} (ignoring node_modules, etc.)
+  Glob patterns supported (e.g., tests/**/*.md)
+
+EXAMPLES:
+  cliscore tests/basic.md                               # Interactive - step through tests
+  cliscore --run tests/**/*.md                          # Run all tests
+  cliscore --run --fast                                 # Fast parallel execution
+  TEST_DIR=\$(mktemp -d); cliscore --run --save=\$TEST_DIR  # Save detailed results
+  cliscore --run --percent                              # Just the pass rate
 `);
 }
 
