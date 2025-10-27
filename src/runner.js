@@ -1,6 +1,7 @@
 import { parseTestFile } from './parser.js';
 import { Executor } from './executor.js';
 import { matchOutput } from './matcher.js';
+import { style } from './colors.js';
 
 /**
  * @typedef {Object} TestResult
@@ -198,7 +199,8 @@ export async function runTestFile(filePath, options = {}) {
           reason: matchResult.skipReason || 'No reason provided'
         });
         if (options.step) {
-          console.log(`⊘ Test SKIPPED: ${matchResult.skipReason}`);
+          console.log('  ' + style.yellow(`⊘ SKIPPED: ${matchResult.skipReason}`));
+          console.log();
         }
       } else if (matchResult.success) {
         result.passed++;
@@ -208,7 +210,8 @@ export async function runTestFile(filePath, options = {}) {
           durationMs: executionResult.durationMs
         });
         if (options.step) {
-          console.log('✓ Test PASSED');
+          console.log('  ' + style.brightGreen('✓ PASSED'));
+          console.log();
         }
       } else {
         result.failed++;
@@ -221,9 +224,11 @@ export async function runTestFile(filePath, options = {}) {
           durationMs: executionResult.durationMs
         });
         if (options.step) {
-          console.log('✗ Test FAILED');
-          console.log('\nFailure details:');
-          console.log(matchResult.error);
+          const action = await executor.promptAfterFailure(matchResult, executionResult.stdout, executionResult.stderr);
+          if (action === 'abort') {
+            // Stop running further tests
+            break;
+          }
         }
       }
     }
@@ -511,14 +516,53 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
         // Show failures
         for (const failure of result.failures) {
           const duration = formatDuration(failure.durationMs);
-          output.push(`  ✗ Line ${failure.lineNumber}: ${failure.command} (${duration})`);
-          output.push(`    ${failure.error}`);
+          output.push(`  ✗ Line ${failure.lineNumber} (${duration})`);
+          output.push('');
 
+          // Show command
+          output.push('Command:');
+          output.push('---cut---');
+          const commandLines = failure.command.split('\n');
+          commandLines.forEach(line => output.push(line));
+          output.push('---cut---');
+          output.push('');
+
+          // Show error/expected pattern
+          output.push('Error:');
+          output.push('---error---');
+          const errorLines = failure.error.split('\n');
+          errorLines.forEach(line => output.push(line));
+          output.push('---error---');
+          output.push('');
+
+          // Show actual output
           if (failure.actualOutput && failure.actualOutput.length > 0) {
-            output.push(`    Actual output:`);
-            for (const line of failure.actualOutput) {
-              output.push(`      ${line}`);
+            output.push('Actual output:');
+            output.push('---cut---');
+            const linesToShow = failure.actualOutput.slice(0, 30);
+            for (const line of linesToShow) {
+              output.push(line);
             }
+            if (failure.actualOutput.length > 30) {
+              output.push(`... (${failure.actualOutput.length - 30} more lines)`);
+            }
+            output.push('---cut---');
+            output.push('');
+          }
+
+          // Show actual stderr if present
+          if (failure.actualStderr && failure.actualStderr.length > 0) {
+            output.push('Actual stderr:');
+            output.push('---cut---');
+            const linesToShow = failure.actualStderr.slice(0, 30);
+            for (const line of linesToShow) {
+              output.push(line);
+            }
+            if (failure.actualStderr.length > 30) {
+              output.push(`... (${failure.actualStderr.length - 30} more lines)`);
+            }
+            output.push('---cut---');
+            output.push('');
           }
         }
 
@@ -619,14 +663,53 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
       if (result.failed > 0) {
         for (const failure of result.failures) {
           const duration = formatDuration(failure.durationMs);
-          output.push(`  ✗ Line ${failure.lineNumber}: ${failure.command} (${duration})`);
-          output.push(`    ${failure.error}`);
+          output.push(`  ✗ Line ${failure.lineNumber} (${duration})`);
+          output.push('');
 
+          // Show command
+          output.push('Command:');
+          output.push('---cut---');
+          const commandLines = failure.command.split('\n');
+          commandLines.forEach(line => output.push(line));
+          output.push('---cut---');
+          output.push('');
+
+          // Show error/expected pattern
+          output.push('Error:');
+          output.push('---error---');
+          const errorLines = failure.error.split('\n');
+          errorLines.forEach(line => output.push(line));
+          output.push('---error---');
+          output.push('');
+
+          // Show actual output
           if (failure.actualOutput && failure.actualOutput.length > 0) {
-            output.push(`    Actual output:`);
-            for (const line of failure.actualOutput) {
-              output.push(`      ${line}`);
+            output.push('Actual output:');
+            output.push('---cut---');
+            const linesToShow = failure.actualOutput.slice(0, 30);
+            for (const line of linesToShow) {
+              output.push(line);
             }
+            if (failure.actualOutput.length > 30) {
+              output.push(`... (${failure.actualOutput.length - 30} more lines)`);
+            }
+            output.push('---cut---');
+            output.push('');
+          }
+
+          // Show actual stderr if present
+          if (failure.actualStderr && failure.actualStderr.length > 0) {
+            output.push('Actual stderr:');
+            output.push('---cut---');
+            const linesToShow = failure.actualStderr.slice(0, 30);
+            for (const line of linesToShow) {
+              output.push(line);
+            }
+            if (failure.actualStderr.length > 30) {
+              output.push(`... (${failure.actualStderr.length - 30} more lines)`);
+            }
+            output.push('---cut---');
+            output.push('');
           }
         }
       }

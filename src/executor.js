@@ -1,8 +1,9 @@
 import { spawn } from 'child_process';
 import { randomBytes } from 'crypto';
 import { readFile, access, stat } from 'fs/promises';
-import { resolve, dirname } from 'path';
+import { resolve, dirname, basename } from 'path';
 import * as readline from 'readline';
+import { style, divider, formatLocation, line } from './colors.js';
 
 /**
  * @typedef {import('./parser.js').TestCommand} TestCommand
@@ -116,29 +117,63 @@ export class Executor {
   }
 
   /**
-   * Prompt user for action in step mode
-   * @param {string} command - The command to show
-   * @returns {Promise<'run'|'pass'|'fail'>}
+   * Ensure readline interface exists and is not closed
    */
-  async promptStep(command) {
-    if (!this.stepMode) {
-      return 'run';
-    }
-
-    if (!this.rl) {
+  ensureReadline() {
+    if (!this.rl || this.rl.closed) {
       this.rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
       });
     }
+  }
 
-    // Show the command
-    const commandPreview = command.length > 100
-      ? command.substring(0, 100) + '...'
+  /**
+   * Prompt user for action in step mode
+   * @param {TestCommand} testCommand - The test command to show
+   * @returns {Promise<'run'|'pass'|'fail'>}
+   */
+  async promptStep(testCommand) {
+    if (!this.stepMode) {
+      return 'run';
+    }
+
+    this.ensureReadline();
+
+    const { command, lineNumber } = testCommand;
+    const fileName = this.testFilePath ? basename(this.testFilePath) : 'test';
+
+    // Display section divider
+    console.log('\n' + divider('STEP MODE', 'brightCyan'));
+    console.log();
+
+    // Display file location
+    console.log('  ' + formatLocation(fileName, lineNumber));
+    console.log();
+
+    // Display the command in a box
+    const commandLines = command.split('\n');
+    const displayCommand = commandLines.length > 1
+      ? commandLines.slice(0, 5).join('\n') + (commandLines.length > 5 ? '\n...' : '')
       : command;
 
+    console.log('  $ ' + displayCommand.split('\n')[0]);
+    if (commandLines.length > 1) {
+      commandLines.slice(1).forEach((line, idx) => {
+        if (idx < 4) {
+          console.log('    ' + line);
+        }
+      });
+      if (commandLines.length > 5) {
+        console.log('    ...');
+      }
+    }
+    console.log();
+    console.log('  ' + line(76, '─', 'dim'));
+    console.log();
+
     return new Promise((resolve) => {
-      this.rl.question(`\nAbout to run: ${commandPreview}\nRun test / skip as Pass / skip as Fail? [R/p/f] `, (answer) => {
+      this.rl.question(style.brightCyan('  ▶ ') + 'Run test / skip as Pass / skip as Fail? ' + style.dim('[R/p/f]') + ' ', (answer) => {
         const normalized = answer.trim().toLowerCase();
         if (normalized === 'p' || normalized === 'pass') {
           resolve('pass');
@@ -146,6 +181,72 @@ export class Executor {
           resolve('fail');
         } else {
           resolve('run');
+        }
+      });
+    });
+  }
+
+  /**
+   * Prompt user after test failure in step mode
+   * @param {Object} matchResult - The match result with error details
+   * @param {string[]} actualOutput - Actual output lines
+   * @param {string[]} actualStderr - Actual stderr lines
+   * @returns {Promise<'continue'|'abort'>}
+   */
+  async promptAfterFailure(matchResult, actualOutput, actualStderr) {
+    if (!this.stepMode) {
+      return 'continue';
+    }
+
+    this.ensureReadline();
+
+    // Display failure with colors
+    console.log('  ' + style.brightRed('✗ FAILED'));
+    console.log();
+
+    // Show the error message
+    console.log(style.dim('---error---'));
+    const errorLines = matchResult.error.split('\n');
+    errorLines.forEach(line => {
+      console.log(style.red(line));
+    });
+    console.log(style.dim('---error---'));
+    console.log();
+
+    // Show actual output if available
+    if (actualOutput && actualOutput.length > 0) {
+      console.log(style.dim('Actual stdout:'));
+      console.log(style.dim('---cut---'));
+      actualOutput.slice(0, 30).forEach(line => {
+        console.log(style.gray(line));
+      });
+      if (actualOutput.length > 30) {
+        console.log(style.dim(`... (${actualOutput.length - 30} more lines)`));
+      }
+      console.log(style.dim('---cut---'));
+      console.log();
+    }
+
+    if (actualStderr && actualStderr.length > 0) {
+      console.log(style.dim('Actual stderr:'));
+      console.log(style.dim('---cut---'));
+      actualStderr.slice(0, 30).forEach(line => {
+        console.log(style.gray(line));
+      });
+      if (actualStderr.length > 30) {
+        console.log(style.dim(`... (${actualStderr.length - 30} more lines)`));
+      }
+      console.log(style.dim('---cut---'));
+      console.log();
+    }
+
+    return new Promise((resolve) => {
+      this.rl.question(style.brightYellow('  ⚠  ') + 'Continue with next test or Abort? ' + style.dim('[C/a]') + ' ', (answer) => {
+        const normalized = answer.trim().toLowerCase();
+        if (normalized === 'a' || normalized === 'abort') {
+          resolve('abort');
+        } else {
+          resolve('continue');
         }
       });
     });
@@ -379,7 +480,7 @@ echo "${stderrEndMarker}" >&2
     const startTime = Date.now();
 
     // In step mode, ask for action
-    const action = await this.promptStep(command);
+    const action = await this.promptStep(testCommand);
     if (action === 'pass') {
       return {
         success: true,
@@ -400,6 +501,13 @@ echo "${stderrEndMarker}" >&2
         skipped: true,
         skipReason: 'Skipped as fail by user'
       };
+    }
+
+    // In step mode, show that execution is starting
+    if (this.stepMode) {
+      console.log('  ' + style.brightCyan('▶ ') + style.dim('Running...'));
+      console.log();
+      console.log(style.dim('---cut---'));
     }
 
     const marker = this.generateMarker();
@@ -472,19 +580,15 @@ echo "${stderrEndMarker}" >&2
             durationMs: Date.now() - startTime
           };
 
-          // In step mode, show the output
+          // In step mode, show execution summary
           if (this.stepMode) {
-            console.log('\n--- Output ---');
-            if (stdoutLines.length > 0) {
-              console.log('stdout:');
-              stdoutLines.forEach(line => console.log('  ' + line));
-            }
-            if (stderrLines.length > 0) {
-              console.log('stderr:');
-              stderrLines.forEach(line => console.log('  ' + line));
-            }
-            console.log(`Exit code: ${exitCode ?? 0}`);
-            console.log('--- End Output ---\n');
+            const duration = (Date.now() - startTime) / 1000;
+            console.log(style.dim('---cut---'));
+            console.log();
+            console.log('  ' + style.dim(`Completed in ${duration.toFixed(2)}s`) +
+                       style.dim(' | Exit code: ') +
+                       (exitCode === 0 ? style.green(exitCode.toString()) : style.red(exitCode.toString())));
+            console.log();
           }
 
           resolve(result);
@@ -530,6 +634,13 @@ echo "${stderrEndMarker}" >&2
           if (completeLines) {
             const lines = completeLines.split('\n');
             stdoutLines.push(...lines);
+
+            // In step mode, display lines in real-time
+            if (this.stepMode) {
+              lines.forEach(line => {
+                console.log(style.gray(line));
+              });
+            }
           }
         }
       };
@@ -552,6 +663,11 @@ echo "${stderrEndMarker}" >&2
             return;
           }
           stderrLines.push(line);
+
+          // In step mode, display stderr lines in real-time (slightly different color)
+          if (this.stepMode) {
+            console.log(style.dim(style.red(line)));
+          }
         }
       };
 
