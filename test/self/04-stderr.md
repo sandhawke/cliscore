@@ -5,7 +5,7 @@ Test stderr matching with [stderr:] syntax.
 ## Basic Stderr
 
 ```console
-$ cliscore fixtures/stderr.md
+$ cliscore --run fixtures/stderr.md
 ...
 ✓ All tests passed! (1/1)
 ```

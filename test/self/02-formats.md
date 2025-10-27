@@ -5,7 +5,7 @@ Test that cliscore supports different file formats.
 ## Markdown Format
 
 ```console
-$ cliscore fixtures/basic.md
+$ cliscore --run fixtures/basic.md
 ...
 ✓ All tests passed! (1/1)
 ```
@@ -13,7 +13,7 @@ $ cliscore fixtures/basic.md
 ## UTF Format (.t files)
 
 ```console
-$ cliscore fixtures/utf.t
+$ cliscore --run fixtures/utf.t
 ...
 ✓ All tests passed! (2/2)
 ```
@@ -21,7 +21,7 @@ $ cliscore fixtures/utf.t
 ## Multiple Files
 
 ```console
-$ cliscore fixtures/basic.md fixtures/utf.t
+$ cliscore --run fixtures/basic.md fixtures/utf.t
 ...
 ✓ All tests passed! (3/3)
 ```

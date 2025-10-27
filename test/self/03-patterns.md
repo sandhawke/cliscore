@@ -5,7 +5,7 @@ Test all pattern matching capabilities.
 ## Regex Patterns
 
 ```console
-$ cliscore fixtures/patterns.md 2>&1 | grep -c "passed"
+$ cliscore --run fixtures/patterns.md 2>&1 | grep -c "passed"
 1
 ```
 
@@ -14,7 +14,7 @@ $ cliscore fixtures/patterns.md 2>&1 | grep -c "passed"
 The fixture tests regex, glob, and ellipsis:
 
 ```console
-$ cliscore fixtures/patterns.md
+$ cliscore --run fixtures/patterns.md
 ...
 ✓ All tests passed! (3/3)
 ```

@@ -111,7 +111,7 @@ Example:
 # Self-Test: My Feature
 
 \`\`\`cliscore
-$ cliscore fixtures/my-test.md
+$ cliscore --run fixtures/my-test.md
 ...
 ✓ All tests passed!
 \`\`\`

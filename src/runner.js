@@ -161,6 +161,11 @@ export async function runTestFile(filePath, options = {}) {
         continue;
       }
 
+      // Handle skip to next file
+      if (executionResult.skipToNext) {
+        break;
+      }
+
       // Handle skipped tests in step mode
       if (executionResult.skipped) {
         if (executionResult.success) {
@@ -225,10 +230,17 @@ export async function runTestFile(filePath, options = {}) {
         });
         if (options.step) {
           const action = await executor.promptAfterFailure(matchResult, executionResult.stdout, executionResult.stderr);
-          if (action === 'abort') {
-            // Stop running further tests
+          if (action === 'run') {
+            // Switch to run mode
+            executor.stepMode = false;
+            options.step = false;
+          } else if (action === 'next') {
+            // Skip to next file
             break;
+          } else if (action === 'quit') {
+            process.exit(1);
           }
+          // 'step' means continue stepping
         }
       }
     }
@@ -521,10 +533,10 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
 
           // Show command
           output.push('Command:');
-          output.push('---cut---');
+          output.push('---actual-output---');
           const commandLines = failure.command.split('\n');
           commandLines.forEach(line => output.push(line));
-          output.push('---cut---');
+          output.push('---end-of-output---');
           output.push('');
 
           // Show error/expected pattern
@@ -538,7 +550,7 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
           // Show actual output
           if (failure.actualOutput && failure.actualOutput.length > 0) {
             output.push('Actual output:');
-            output.push('---cut---');
+            output.push('---actual-output---');
             const linesToShow = failure.actualOutput.slice(0, 30);
             for (const line of linesToShow) {
               output.push(line);
@@ -546,14 +558,14 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
             if (failure.actualOutput.length > 30) {
               output.push(`... (${failure.actualOutput.length - 30} more lines)`);
             }
-            output.push('---cut---');
+            output.push('---end-of-output---');
             output.push('');
           }
 
           // Show actual stderr if present
           if (failure.actualStderr && failure.actualStderr.length > 0) {
             output.push('Actual stderr:');
-            output.push('---cut---');
+            output.push('---actual-output---');
             const linesToShow = failure.actualStderr.slice(0, 30);
             for (const line of linesToShow) {
               output.push(line);
@@ -561,7 +573,7 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
             if (failure.actualStderr.length > 30) {
               output.push(`... (${failure.actualStderr.length - 30} more lines)`);
             }
-            output.push('---cut---');
+            output.push('---end-of-output---');
             output.push('');
           }
         }
@@ -668,10 +680,10 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
 
           // Show command
           output.push('Command:');
-          output.push('---cut---');
+          output.push('---actual-output---');
           const commandLines = failure.command.split('\n');
           commandLines.forEach(line => output.push(line));
-          output.push('---cut---');
+          output.push('---end-of-output---');
           output.push('');
 
           // Show error/expected pattern
@@ -685,7 +697,7 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
           // Show actual output
           if (failure.actualOutput && failure.actualOutput.length > 0) {
             output.push('Actual output:');
-            output.push('---cut---');
+            output.push('---actual-output---');
             const linesToShow = failure.actualOutput.slice(0, 30);
             for (const line of linesToShow) {
               output.push(line);
@@ -693,14 +705,14 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
             if (failure.actualOutput.length > 30) {
               output.push(`... (${failure.actualOutput.length - 30} more lines)`);
             }
-            output.push('---cut---');
+            output.push('---end-of-output---');
             output.push('');
           }
 
           // Show actual stderr if present
           if (failure.actualStderr && failure.actualStderr.length > 0) {
             output.push('Actual stderr:');
-            output.push('---cut---');
+            output.push('---actual-output---');
             const linesToShow = failure.actualStderr.slice(0, 30);
             for (const line of linesToShow) {
               output.push(line);
@@ -708,7 +720,7 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
             if (failure.actualStderr.length > 30) {
               output.push(`... (${failure.actualStderr.length - 30} more lines)`);
             }
-            output.push('---cut---');
+            output.push('---end-of-output---');
             output.push('');
           }
         }

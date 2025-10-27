@@ -117,28 +117,49 @@ export class Executor {
   }
 
   /**
-   * Ensure readline interface exists and is not closed
+   * Read a single keystroke from stdin
+   * @param {string} prompt - Prompt to display
+   * @returns {Promise<string>} - Single character pressed
    */
-  ensureReadline() {
-    if (!this.rl || this.rl.closed) {
-      this.rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
-    }
+  async readSingleKey(prompt) {
+    process.stdout.write(prompt);
+
+    return new Promise((resolve) => {
+      const wasRaw = process.stdin.isRaw;
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+
+      const onData = (data) => {
+        process.stdin.setRawMode(wasRaw);
+        process.stdin.pause();
+        process.stdin.removeListener('data', onData);
+
+        const key = data.toString();
+
+        // Handle Ctrl+C
+        if (key === '\u0003') {
+          process.stdout.write('\n');
+          process.exit(0);
+        }
+
+        // Echo the key and newline
+        process.stdout.write(key + '\n');
+        resolve(key);
+      };
+
+      process.stdin.on('data', onData);
+    });
   }
 
   /**
    * Prompt user for action in step mode
    * @param {TestCommand} testCommand - The test command to show
-   * @returns {Promise<'run'|'pass'|'fail'>}
+   * @returns {Promise<'step'|'run'|'pass'|'fail'|'next'|'quit'>}
    */
   async promptStep(testCommand) {
     if (!this.stepMode) {
-      return 'run';
+      return 'step';
     }
-
-    this.ensureReadline();
 
     const { command, lineNumber } = testCommand;
     const fileName = this.testFilePath ? basename(this.testFilePath) : 'test';
@@ -172,18 +193,29 @@ export class Executor {
     console.log('  ' + line(76, '─', 'dim'));
     console.log();
 
-    return new Promise((resolve) => {
-      this.rl.question(style.brightCyan('  ▶ ') + 'Run test / skip as Pass / skip as Fail? ' + style.dim('[R/p/f]') + ' ', (answer) => {
-        const normalized = answer.trim().toLowerCase();
-        if (normalized === 'p' || normalized === 'pass') {
-          resolve('pass');
-        } else if (normalized === 'f' || normalized === 'fail') {
-          resolve('fail');
-        } else {
-          resolve('run');
-        }
-      });
-    });
+    const answer = await this.readSingleKey(
+      style.brightCyan('  ▶ ') +
+      '(s)tep, (r)un, skip as (p)ass, skip as (f)ail, (n)ext file, (q)uit? ' +
+      style.dim('[s/r/p/f/n/q]') + ' '
+    );
+
+    const normalized = answer.trim().toLowerCase();
+    if (normalized === 's' || normalized === 'step') {
+      return 'step';
+    } else if (normalized === 'r' || normalized === 'run') {
+      return 'run';
+    } else if (normalized === 'p' || normalized === 'pass') {
+      return 'pass';
+    } else if (normalized === 'f' || normalized === 'fail') {
+      return 'fail';
+    } else if (normalized === 'n' || normalized === 'next') {
+      return 'next';
+    } else if (normalized === 'q' || normalized === 'quit') {
+      return 'quit';
+    } else {
+      // Default to step
+      return 'step';
+    }
   }
 
   /**
@@ -191,14 +223,12 @@ export class Executor {
    * @param {Object} matchResult - The match result with error details
    * @param {string[]} actualOutput - Actual output lines
    * @param {string[]} actualStderr - Actual stderr lines
-   * @returns {Promise<'continue'|'abort'>}
+   * @returns {Promise<'step'|'run'|'next'|'quit'>}
    */
   async promptAfterFailure(matchResult, actualOutput, actualStderr) {
     if (!this.stepMode) {
-      return 'continue';
+      return 'step';
     }
-
-    this.ensureReadline();
 
     // Display failure with colors
     console.log('  ' + style.brightRed('✗ FAILED'));
@@ -216,40 +246,49 @@ export class Executor {
     // Show actual output if available
     if (actualOutput && actualOutput.length > 0) {
       console.log(style.dim('Actual stdout:'));
-      console.log(style.dim('---cut---'));
+      console.log(style.dim('---actual-output---'));
       actualOutput.slice(0, 30).forEach(line => {
         console.log(style.gray(line));
       });
       if (actualOutput.length > 30) {
         console.log(style.dim(`... (${actualOutput.length - 30} more lines)`));
       }
-      console.log(style.dim('---cut---'));
+      console.log(style.dim('---end-of-output---'));
       console.log();
     }
 
     if (actualStderr && actualStderr.length > 0) {
       console.log(style.dim('Actual stderr:'));
-      console.log(style.dim('---cut---'));
+      console.log(style.dim('---actual-output---'));
       actualStderr.slice(0, 30).forEach(line => {
         console.log(style.gray(line));
       });
       if (actualStderr.length > 30) {
         console.log(style.dim(`... (${actualStderr.length - 30} more lines)`));
       }
-      console.log(style.dim('---cut---'));
+      console.log(style.dim('---end-of-output---'));
       console.log();
     }
 
-    return new Promise((resolve) => {
-      this.rl.question(style.brightYellow('  ⚠  ') + 'Continue with next test or Abort? ' + style.dim('[C/a]') + ' ', (answer) => {
-        const normalized = answer.trim().toLowerCase();
-        if (normalized === 'a' || normalized === 'abort') {
-          resolve('abort');
-        } else {
-          resolve('continue');
-        }
-      });
-    });
+    const answer = await this.readSingleKey(
+      style.brightYellow('  ⚠  ') +
+      '(s)tep, (r)un, (n)ext file, (q)uit? ' +
+      style.dim('[s/r/n/q]') + ' '
+    );
+
+    const normalized = answer.trim().toLowerCase();
+    if (normalized === 's' || normalized === 'step') {
+      return 'step';
+    } else if (normalized === 'r' || normalized === 'run') {
+      return 'run';
+    } else if (normalized === 'n' || normalized === 'next') {
+      return 'next';
+    } else if (normalized === 'q' || normalized === 'quit') {
+      return 'quit';
+    } else {
+      // Default to step
+      return 'step';
+    }
   }
 
   /**
@@ -501,13 +540,28 @@ echo "${stderrEndMarker}" >&2
         skipped: true,
         skipReason: 'Skipped as fail by user'
       };
+    } else if (action === 'run') {
+      // Switch out of step mode
+      this.stepMode = false;
+    } else if (action === 'next') {
+      return {
+        success: false,
+        stdout: [],
+        stderr: [],
+        exitCode: 0,
+        durationMs: Date.now() - startTime,
+        skipToNext: true,
+        skipReason: 'Skip to next file'
+      };
+    } else if (action === 'quit') {
+      process.exit(0);
     }
 
     // In step mode, show that execution is starting
     if (this.stepMode) {
       console.log('  ' + style.brightCyan('▶ ') + style.dim('Running...'));
       console.log();
-      console.log(style.dim('---cut---'));
+      console.log(style.dim('---actual-output---'));
     }
 
     const marker = this.generateMarker();
@@ -583,7 +637,7 @@ echo "${stderrEndMarker}" >&2
           // In step mode, show execution summary
           if (this.stepMode) {
             const duration = (Date.now() - startTime) / 1000;
-            console.log(style.dim('---cut---'));
+            console.log(style.dim('---end-of-output---'));
             console.log();
             console.log('  ' + style.dim(`Completed in ${duration.toFixed(2)}s`) +
                        style.dim(' | Exit code: ') +

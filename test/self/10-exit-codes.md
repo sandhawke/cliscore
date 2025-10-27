@@ -5,7 +5,7 @@ Test that cliscore handles command exit codes correctly.
 ## Success Exit Code
 
 ```console
-$ cliscore fixtures/basic.md && echo "success"
+$ cliscore --run fixtures/basic.md && echo "success"
 ...
 success
 ```
@@ -13,7 +13,7 @@ success
 ## Failure Exit Code
 
 ```console
-$ cliscore fixtures/failing.md || echo "failed as expected"
+$ cliscore --run fixtures/failing.md || echo "failed as expected"
 ...
 failed as expected
 ```

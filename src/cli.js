@@ -36,7 +36,7 @@ function parseArgs(args) {
   const options = {
     json: false,
     dryRun: false,
-    step: false,
+    step: true, // Step mode is now the default
     percent: false,
     verbosity: 1, // 0=quiet, 1=normal, 2=verbose, 3=very verbose
     allowedLanguages: ['console', 'cliscore'],
@@ -59,6 +59,8 @@ function parseArgs(args) {
       options.dryRun = true;
     } else if (arg === '--step') {
       options.step = true;
+    } else if (arg === '--run') {
+      options.step = false;
     } else if (arg === '--percent') {
       options.percent = true;
     } else if (arg === '--quiet' || arg === '-q') {
@@ -165,7 +167,8 @@ Usage: cliscore [options] <test-files...>
 Options:
   --json              Output results as JSON
   --dry-run           Parse tests but don't execute them
-  --step              Interactive mode: prompt before each command, show output after
+  (default)           Interactive step mode: prompt before each test, show output
+  --run               Non-interactive: run all tests without stopping
   --percent           Output only the pass percentage (e.g., "95.5")
   -q, --quiet         Quiet: only summary line
   (default)           One line per file with pass rate
@@ -189,11 +192,10 @@ Test Files:
   Glob patterns are supported (e.g., tests/**/*.md)
 
 Examples:
-  cliscore tests/basic.t
-  cliscore tests/**/*.md
-  cliscore --step tests/basic.t
-  cliscore --fast tests/**/*.md
-  cliscore --jobs 4 tests/**/*.t
+  cliscore tests/basic.t                                 (interactive step mode)
+  cliscore --run tests/**/*.md                          (non-interactive)
+  cliscore --run --fast tests/**/*.md                   (parallel non-interactive)
+  cliscore --run --jobs 4 tests/**/*.t                  (4 parallel jobs)
   cliscore --json --dry-run tests/example.md
   cliscore --allow-lang shell-session tests/**/*.md
 `);

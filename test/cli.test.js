@@ -39,7 +39,7 @@ function runCLI(args) {
 describe('CLI', () => {
   describe('--help', () => {
     it('should display help message', async () => {
-      const result = await runCLI(['--help']);
+      const result = await runCLI(['--run', '--help']);
 
       assert.equal(result.exitCode, 0);
       assert.match(result.stdout, /usage/i);
@@ -58,7 +58,7 @@ test
       await mkdir(TEST_DIR, { recursive: true });
       await writeFile(testFile, content);
 
-      const result = await runCLI([testFile]);
+      const result = await runCLI(['--run', testFile]);
 
       assert.equal(result.exitCode, 0);
       assert.match(result.stdout, /all tests passed/i);
@@ -76,7 +76,7 @@ expected
       await mkdir(TEST_DIR, { recursive: true });
       await writeFile(testFile, content);
 
-      const result = await runCLI([testFile]);
+      const result = await runCLI(['--run', testFile]);
 
       assert.equal(result.exitCode, 1);
       assert.match(result.stdout, /failed/i);
@@ -101,7 +101,7 @@ test2
       await writeFile(testFile1, content1);
       await writeFile(testFile2, content2);
 
-      const result = await runCLI([testFile1, testFile2]);
+      const result = await runCLI(['--run', testFile1, testFile2]);
 
       assert.equal(result.exitCode, 0);
       assert.match(result.stdout, /all tests passed/i);
@@ -121,7 +121,7 @@ test
       await mkdir(TEST_DIR, { recursive: true });
       await writeFile(testFile, content);
 
-      const result = await runCLI(['--dry-run', testFile]);
+      const result = await runCLI(['--run', '--dry-run', testFile]);
 
       assert.equal(result.exitCode, 0);
       assert.match(result.stdout, /parsed/i);
@@ -142,7 +142,7 @@ test
       await mkdir(TEST_DIR, { recursive: true });
       await writeFile(testFile, content);
 
-      const result = await runCLI(['--json', testFile]);
+      const result = await runCLI(['--run', '--json', testFile]);
 
       assert.equal(result.exitCode, 0);
 
@@ -164,7 +164,7 @@ test
       await mkdir(TEST_DIR, { recursive: true });
       await writeFile(testFile, content);
 
-      const result = await runCLI(['--json', '--dry-run', testFile]);
+      const result = await runCLI(['--run', '--json', '--dry-run', testFile]);
 
       assert.equal(result.exitCode, 0);
 
@@ -188,7 +188,7 @@ custom
       await mkdir(TEST_DIR, { recursive: true });
       await writeFile(testFile, content);
 
-      const result = await runCLI(['--allow-lang', 'shell-session', testFile]);
+      const result = await runCLI(['--run', '--allow-lang', 'shell-session', testFile]);
 
       assert.equal(result.exitCode, 0);
       assert.match(result.stdout, /all tests passed/i);
@@ -200,14 +200,14 @@ custom
   describe('error handling', () => {
     it('should error on no files found with explicit pattern', async () => {
       // Use a pattern that won't match anything
-      const result = await runCLI(['/tmp/nonexistent-dir/**/*.md']);
+      const result = await runCLI(['--run', '/tmp/nonexistent-dir/**/*.md']);
 
       assert.equal(result.exitCode, 1);
       assert.match(result.stderr, /no test files/i);
     });
 
     it('should error on non-existent file', async () => {
-      const result = await runCLI(['/nonexistent/file.md']);
+      const result = await runCLI(['--run', '/nonexistent/file.md']);
 
       assert.equal(result.exitCode, 1);
     });
@@ -218,7 +218,7 @@ custom
       await mkdir(TEST_DIR, { recursive: true });
       await writeFile(testFile, content);
 
-      const result = await runCLI([testFile]);
+      const result = await runCLI(['--run', testFile]);
 
       assert.equal(result.exitCode, 1);
 
@@ -238,7 +238,7 @@ test
       await writeFile(join(testDir, 'test1.md'), content);
       await writeFile(join(testDir, 'test2.md'), content);
 
-      const result = await runCLI([`${testDir}/*.md`]);
+      const result = await runCLI(['--run', `${testDir}/*.md`]);
 
       assert.equal(result.exitCode, 0);
       assert.match(result.stdout, /all tests passed/i);
@@ -256,7 +256,7 @@ test
       await mkdir(TEST_DIR, { recursive: true });
       await writeFile(testFile, content);
 
-      const result = await runCLI([testFile]);
+      const result = await runCLI(['--run', testFile]);
 
       assert.equal(result.exitCode, 0);
       assert.match(result.stdout, /all tests passed/i);

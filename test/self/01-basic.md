@@ -5,7 +5,7 @@ Test that cliscore can run simple tests and report results correctly.
 ## Passing Test
 
 ```console
-$ cliscore fixtures/basic.md
+$ cliscore --run fixtures/basic.md
 ...
 ✓ All tests passed! (1/1)
 ```
@@ -13,7 +13,7 @@ $ cliscore fixtures/basic.md
 ## Help Output
 
 ```console
-$ cliscore --help | grep "Usage:"
+$ cliscore --run --help | grep "Usage:"
 Usage: cliscore [options] <test-files...>
 ```
 
@@ -22,6 +22,6 @@ Usage: cliscore [options] <test-files...>
 The CLI should be executable:
 
 ```console
-$ cliscore fixtures/basic.md 2>&1 | tail -1
+$ cliscore --run fixtures/basic.md 2>&1 | tail -1
 ✓ All tests passed! (1/1)
 ```
