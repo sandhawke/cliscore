@@ -148,6 +148,7 @@ export async function runTestFile(filePath, options = {}) {
         result.failures.push({
           command: test.command,
           lineNumber: test.lineNumber,
+          expectedOutput: test.expectedOutput,
           error: executionResult.error,
           actualOutput: executionResult.stdout || [],
           actualStderr: executionResult.stderr || [],
@@ -178,6 +179,7 @@ export async function runTestFile(filePath, options = {}) {
           result.failures.push({
             command: test.command,
             lineNumber: test.lineNumber,
+            expectedOutput: test.expectedOutput,
             error: executionResult.skipReason || 'Skipped by user',
             actualOutput: executionResult.stdout,
             actualStderr: executionResult.stderr,
@@ -223,6 +225,7 @@ export async function runTestFile(filePath, options = {}) {
         result.failures.push({
           command: test.command,
           lineNumber: test.lineNumber,
+          expectedOutput: test.expectedOutput,
           error: matchResult.error || 'Unknown error',
           actualOutput: executionResult.stdout,
           actualStderr: executionResult.stderr,
@@ -538,6 +541,15 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
           output.push(cutLine('end', 'cyan'));
           output.push('');
 
+          // Show expected output
+          if (failure.expectedOutput && failure.expectedOutput.length > 0) {
+            output.push(cutLine('expected-output', 'green'));
+            const formattedExpected = formatExpectedOutput(failure.expectedOutput);
+            formattedExpected.forEach(line => output.push(line));
+            output.push(cutLine('end', 'green'));
+            output.push('');
+          }
+
           // Show error/expected pattern
           output.push(cutLine('error', 'red'));
           const errorLines = failure.error.split('\n');
@@ -681,6 +693,15 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
           output.push(cutLine('end', 'cyan'));
           output.push('');
 
+          // Show expected output
+          if (failure.expectedOutput && failure.expectedOutput.length > 0) {
+            output.push(cutLine('expected-output', 'green'));
+            const formattedExpected = formatExpectedOutput(failure.expectedOutput);
+            formattedExpected.forEach(line => output.push(line));
+            output.push(cutLine('end', 'green'));
+            output.push('');
+          }
+
           // Show error/expected pattern
           output.push(cutLine('error', 'red'));
           const errorLines = failure.error.split('\n');
@@ -756,6 +777,15 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
       commandLines.forEach(line => output.push(line));
       output.push(cutLine('end', 'cyan'));
       output.push('');
+
+      // Show expected output
+      if (failure.expectedOutput && failure.expectedOutput.length > 0) {
+        output.push(cutLine('expected-output', 'green'));
+        const formattedExpected = formatExpectedOutput(failure.expectedOutput);
+        formattedExpected.forEach(line => output.push(line));
+        output.push(cutLine('end', 'green'));
+        output.push('');
+      }
 
       // Show error
       output.push(cutLine('error', 'red'));
@@ -845,6 +875,51 @@ export function formatResults(results, verbosity = 1, streamed = false, showFail
  */
 function cutLine(label, color = 'cyan') {
   return `---${style[color](label)}---`;
+}
+
+/**
+ * Format expected output patterns for display
+ * @param {Array} expectedOutput - Array of output expectations
+ * @returns {string[]} - Formatted lines to display
+ */
+function formatExpectedOutput(expectedOutput) {
+  const lines = [];
+
+  for (const expectation of expectedOutput) {
+    const stream = expectation.stream === 'stderr' ? '[stderr] ' : '';
+
+    switch (expectation.type) {
+      case 'literal':
+        lines.push(`${stream}${expectation.pattern}`);
+        break;
+      case 'regex':
+        const flags = expectation.flags ? expectation.flags : '';
+        lines.push(`${stream}[Matching: /${expectation.pattern}/${flags}]`);
+        break;
+      case 'glob':
+        lines.push(`${stream}[Matching glob: ${expectation.pattern}]`);
+        break;
+      case 'ellipsis':
+        lines.push('...');
+        break;
+      case 'no-eol':
+        lines.push(`${expectation.pattern} (no-eol)`);
+        break;
+      case 'skip':
+        lines.push(`[SKIP: ${expectation.reason}]`);
+        break;
+      case 'inline':
+        lines.push(expectation.pattern);
+        break;
+      case 'stderr':
+        lines.push(`[stderr: ${expectation.pattern}]`);
+        break;
+      default:
+        lines.push(`[Unknown expectation type: ${expectation.type}]`);
+    }
+  }
+
+  return lines;
 }
 
 /**
