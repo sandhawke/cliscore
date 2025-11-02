@@ -48,7 +48,8 @@ function parseArgs(args) {
     debug: false, // Debug mode: show test summaries
     trace: false, // Trace mode: show all I/O events
     progress: false, // Progress mode: show real-time progress
-    saveDir: null // Directory to save detailed test results
+    saveDir: null, // Directory to save detailed test results
+    showTutorial: false
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -139,6 +140,8 @@ function parseArgs(args) {
       options.saveDir = args[++i];
     } else if (arg === '--version' || arg === '-V') {
       options.showVersion = true;
+    } else if (arg === '--tutorial') {
+      options.showTutorial = true;
     } else if (arg === '--help' || arg === '-h') {
       printHelp();
       process.exit(0);
@@ -163,6 +166,20 @@ async function printVersion() {
     console.log(`cliscore v${packageJson.version}`);
   } catch (error) {
     console.log('cliscore (version unknown)');
+  }
+}
+
+/**
+ * Print tutorial content
+ */
+async function printTutorial() {
+  try {
+    const tutorialPath = resolve(__dirname, '../TUTORIAL.md');
+    const tutorial = await readFile(tutorialPath, 'utf-8');
+    console.log(tutorial);
+  } catch (error) {
+    console.error(`Error reading tutorial: ${error.message}`);
+    process.exit(1);
   }
 }
 
@@ -209,6 +226,7 @@ DEBUGGING:
 
 HELP:
   -h, --help          Show this help
+  --tutorial          Show the quick-start tutorial
   -V, --version       Show version
 
 FILES:
@@ -396,6 +414,11 @@ async function main() {
   // Handle --version flag
   if (cliOptions.showVersion) {
     await printVersion();
+    process.exit(0);
+  }
+
+  if (cliOptions.showTutorial) {
+    await printTutorial();
     process.exit(0);
   }
 
