@@ -127,6 +127,28 @@ last
       await rm(TEST_DIR, { recursive: true, force: true });
     });
 
+    it('should export captured variables to subsequent commands', async () => {
+      const content = `\`\`\`cliscore
+$ echo "Version: 1.2.3"
+[Matching: /Version: (?<VERSION>\\d+\\.\\d+\\.\\d+)/]
+$ echo "$VERSION"
+1.2.3
+\`\`\`
+`;
+      const testFile = join(TEST_DIR, 'captures.md');
+      await mkdir(TEST_DIR, { recursive: true });
+      await writeFile(testFile, content);
+
+      const result = await runTestFile(testFile);
+
+      assert.equal(result.passed, 2);
+      assert.equal(result.failed, 0);
+      assert.equal(result.failures.length, 0);
+      assert.deepEqual(result.passes[0].captures, [['VERSION', '1.2.3']]);
+
+      await rm(TEST_DIR, { recursive: true, force: true });
+    });
+
     it('should include actual output in failures', async () => {
       const content = `\`\`\`cliscore
 $ echo "actual"

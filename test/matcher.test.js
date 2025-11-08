@@ -203,6 +203,84 @@ describe('Matcher', () => {
     });
   });
 
+  describe('Inline ellipsis', () => {
+    it('should match mid-line ellipsis placeholders', () => {
+      const actual = ['Total: 42 files processed'];
+      const expected = [{ type: 'inline', pattern: 'Total: ... files processed' }];
+
+      const result = matchOutput(actual, [], expected);
+
+      assert.equal(result.success, true);
+    });
+
+    it('should treat escaped ellipsis as literal text', () => {
+      const actual = ['Wait ... and see'];
+      const expected = [{ type: 'inline', pattern: 'Wait \\... and see' }];
+
+      const result = matchOutput(actual, [], expected);
+
+      assert.equal(result.success, true);
+    });
+  });
+
+  describe('Named captures', () => {
+    it('should return captures for bracket regex expectations', () => {
+      const actual = ['Version 1.2.3'];
+      const expected = [{
+        type: 'regex',
+        pattern: 'Version (?<VERSION>\\d+\\.\\d+\\.\\d+)'
+      }];
+
+      const result = matchOutput(actual, [], expected);
+
+      assert.equal(result.success, true);
+      assert.deepEqual(result.captures, [['VERSION', '1.2.3']]);
+    });
+
+    it('should return captures for inline patterns', () => {
+      const actual = ['Build #a1b2c3 (sha abcdef1234567890)'];
+      const expected = [{
+        type: 'inline',
+        pattern: 'Build #[Matching: /(?<BUILD>[a-f0-9]{6})/] (sha [Matching: /(?<SHA>[a-f0-9]{16})/])'
+      }];
+
+      const result = matchOutput(actual, [], expected);
+
+      assert.equal(result.success, true);
+      assert.deepEqual(result.captures, [
+        ['BUILD', 'a1b2c3'],
+        ['SHA', 'abcdef1234567890']
+      ]);
+    });
+
+    it('should fail if capture name is not a valid shell identifier', () => {
+      const actual = ['Ticket 1234'];
+      const expected = [{
+        type: 'regex',
+        pattern: 'Ticket (?<ticket-number>\\d+)'
+      }];
+
+      const result = matchOutput(actual, [], expected);
+
+      assert.equal(result.success, false);
+      assert.match(result.error, /Invalid capture name/i);
+    });
+
+    it('should reject global flag with named captures', () => {
+      const actual = ['ID abc123'];
+      const expected = [{
+        type: 'regex',
+        pattern: 'ID (?<ID>[a-z0-9]+)',
+        flags: 'g'
+      }];
+
+      const result = matchOutput(actual, [], expected);
+
+      assert.equal(result.success, false);
+      assert.match(result.error, /Global regex flag/i);
+    });
+  });
+
   describe('Error cases', () => {
     it('should detect missing output', () => {
       const actual = ['line1'];

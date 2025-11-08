@@ -281,15 +281,42 @@ export async function runTestFile(filePath, options = {}) {
           console.log();
         }
       } else if (matchResult.success) {
+        let exportedCaptures = null;
+        if (matchResult.captures && matchResult.captures.length > 0) {
+          exportedCaptures = await executor.exportCapturedVariables(matchResult.captures);
+
+          if (exportedCaptures && exportedCaptures.exitCode !== 0 && options.verbosity >= 1) {
+            console.warn(`Warning: failed to export captured variables (exit code ${exportedCaptures.exitCode})`);
+          }
+
+          if (options.step) {
+            const preview = matchResult.captures
+              .map(([name, value]) => `${name}=${value}`)
+              .join(', ');
+            console.log('  ' + style.dim(`Captured: ${preview}`));
+            console.log();
+          }
+        }
+
         result.passed++;
-        result.passes.push({
+        const passEntry = {
           command: test.command,
           lineNumber: test.lineNumber,
           durationMs: executionResult.durationMs
-        });
+        };
+
+        if (matchResult.captures && matchResult.captures.length > 0) {
+          passEntry.captures = matchResult.captures;
+        }
+
+        result.passes.push(passEntry);
 
         // Save test result if saveDir is specified
         if (options.saveDir) {
+          const captureData = matchResult.captures && matchResult.captures.length > 0
+            ? matchResult.captures
+            : undefined;
+
           saveTestResult(options.saveDir, ++options.testCounter, filePath, {
             command: test.command,
             lineNumber: test.lineNumber,
@@ -299,7 +326,8 @@ export async function runTestFile(filePath, options = {}) {
             exitCode: executionResult.exitCode,
             stdout: executionResult.stdout || [],
             stderr: executionResult.stderr || [],
-            durationMs: executionResult.durationMs
+            durationMs: executionResult.durationMs,
+            captures: captureData
           });
         }
 
@@ -1089,7 +1117,8 @@ function saveTestResult(saveDir, testNum, filePath, testData) {
     exitCode: testData.exitCode,
     durationMs: testData.durationMs,
     skipped: testData.skipped || false,
-    skipReason: testData.skipReason || null
+    skipReason: testData.skipReason || null,
+    captures: testData.captures || []
   };
   writeFileSync(join(saveDir, `${prefix}-metadata.json`), JSON.stringify(metadata, null, 2));
 

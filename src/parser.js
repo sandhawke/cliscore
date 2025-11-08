@@ -305,6 +305,10 @@ function parseOutputExpectations(lines) {
         expectations.push({ type: 'literal', pattern: line });
       }
     }
+    // Detect inline ellipsis placeholders within otherwise literal lines
+    else if (hasUnescapedEllipsis(line)) {
+      expectations.push({ type: 'inline', pattern: line });
+    }
     // Default: literal match
     else {
       expectations.push({ type: 'literal', pattern: line });
@@ -326,4 +330,22 @@ function parseRegexPattern(pattern) {
     return { regex: match[1], flags: match[2] || undefined };
   }
   return { regex: pattern };
+}
+
+/**
+ * Detect whether a string contains an unescaped ellipsis (...).
+ * @param {string} line
+ * @returns {boolean}
+ */
+function hasUnescapedEllipsis(line) {
+  for (let i = 0; i < line.length - 2; i++) {
+    if (line[i] === '\\') {
+      i++; // Skip escaped character
+      continue;
+    }
+    if (line[i] === '.' && line[i + 1] === '.' && line[i + 2] === '.') {
+      return true;
+    }
+  }
+  return false;
 }

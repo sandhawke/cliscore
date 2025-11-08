@@ -557,6 +557,117 @@ echo "${stderrEndMarker}" >&2
   }
 
   /**
+   * Export captured variables into the active shell session.
+   * @param {Array<[string, string]>} captures
+   * @returns {Promise<{exitCode: number, stdout: string[], stderr: string[]}|null>}
+   */
+  async exportCapturedVariables(captures) {
+    if (!captures || captures.length === 0) {
+      return null;
+    }
+
+    if (!this.shell || !this.shellReady || this.shellDead) {
+      throw new Error('Executor not started. Call start() first.');
+    }
+
+    const assignments = new Map();
+    for (const [name, value] of captures) {
+      assignments.set(name, value);
+    }
+
+    const marker = this.generateMarker();
+    const stdoutEndMarker = `__CLISCORE_EXPORT_STDOUT_${marker}__`;
+    const stderrEndMarker = `__CLISCORE_EXPORT_STDERR_${marker}__`;
+
+    const lines = ['__CLISCORE_EXPORT_STATUS=0'];
+    assignments.forEach((value, name) => {
+      const quoted = shellQuote(value);
+      lines.push(`export ${name}=${quoted} || __CLISCORE_EXPORT_STATUS=$?`);
+    });
+    lines.push(`echo "${stdoutEndMarker}:$__CLISCORE_EXPORT_STATUS"`);
+    lines.push(`echo "${stderrEndMarker}" >&2`);
+
+    const script = lines.join('\n') + '\n';
+    this.traceLog('STDIN', `Exporting captured variables: ${Array.from(assignments.keys()).join(', ')}`);
+
+    return new Promise((resolve) => {
+      const stdoutLines = [];
+      const stderrLines = [];
+      let stdoutBuffer = '';
+      let stderrBuffer = '';
+      let exitCode = 0;
+      let stdoutComplete = false;
+      let stderrComplete = false;
+
+      const finishIfComplete = () => {
+        if (stdoutComplete && stderrComplete) {
+          resolve({
+            exitCode,
+            stdout: stdoutLines,
+            stderr: stderrLines
+          });
+        }
+      };
+
+      const stdoutHandler = (data) => {
+        const dataStr = data.toString();
+        this.traceLog('STDOUT', dataStr.trimEnd());
+        stdoutBuffer += dataStr;
+
+        const markerRegex = new RegExp(`${stdoutEndMarker}:(\\d+)`);
+        const markerMatch = stdoutBuffer.match(markerRegex);
+        if (markerMatch) {
+          const outputBeforeMarker = stdoutBuffer.substring(0, markerMatch.index);
+          if (outputBeforeMarker) {
+            const pieces = outputBeforeMarker.split('\n');
+            if (pieces[pieces.length - 1] === '' && pieces.length > 1) {
+              pieces.pop();
+            }
+            stdoutLines.push(...pieces);
+          }
+          exitCode = parseInt(markerMatch[1], 10);
+          stdoutComplete = true;
+          this.shell.stdout.off('data', stdoutHandler);
+          finishIfComplete();
+          return;
+        }
+
+        const newlineIndex = stdoutBuffer.lastIndexOf('\n');
+        if (newlineIndex !== -1) {
+          const chunk = stdoutBuffer.substring(0, newlineIndex);
+          stdoutBuffer = stdoutBuffer.substring(newlineIndex + 1);
+          if (chunk) {
+            const pieces = chunk.split('\n');
+            stdoutLines.push(...pieces);
+          }
+        }
+      };
+
+      const stderrHandler = (data) => {
+        const dataStr = data.toString();
+        this.traceLog('STDERR', dataStr.trimEnd());
+        stderrBuffer += dataStr;
+        const parts = stderrBuffer.split('\n');
+        stderrBuffer = parts.pop() || '';
+
+        for (const part of parts) {
+          if (part.includes(stderrEndMarker)) {
+            stderrComplete = true;
+            this.shell.stderr.off('data', stderrHandler);
+            finishIfComplete();
+            return;
+          }
+          stderrLines.push(part);
+        }
+      };
+
+      this.shell.stdout.on('data', stdoutHandler);
+      this.shell.stderr.on('data', stderrHandler);
+      this.shell.stdin.write(script);
+    });
+  }
+
+  /**
    * Execute a command and capture its output
    * @param {TestCommand} testCommand - Test command to execute
    * @returns {Promise<ExecutionResult>}
@@ -984,4 +1095,17 @@ echo "${stderrEndMarker}" >&2
   generateMarker() {
     return randomBytes(8).toString('hex');
   }
+}
+
+/**
+ * Quote a value for safe inclusion in shell exports.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function shellQuote(value) {
+  const stringValue = value === undefined || value === null ? '' : String(value);
+  if (stringValue.length === 0) {
+    return "''";
+  }
+  return `'${stringValue.replace(/'/g, `'\"'\"'`)}'`;
 }

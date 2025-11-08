@@ -9,7 +9,12 @@
  * @property {number} [linesConsumed] - Number of output lines consumed
  * @property {boolean} [skipped] - Whether the test was skipped
  * @property {string} [skipReason] - Reason for skipping
+ * @property {Array<[string, string]>} [captures] - Named capture assignments
  */
+
+const VALID_CAPTURE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const NAMED_CAPTURE_PATTERN = /\(\?<([A-Za-z_][A-Za-z0-9_]*)>/;
+const NAMED_GROUP_ANY = /\(\?<([^>=!][^>]*)>/g;
 
 /**
  * Match actual output against expected output patterns
@@ -37,6 +42,8 @@ export function matchOutput(stdout, stderr, expectations) {
 
   let actualIndex = 0;
   let expectIndex = 0;
+  const captureMap = new Map();
+  const captureOrder = [];
 
   while (expectIndex < expectations.length) {
     const expectation = expectations[expectIndex];
@@ -101,6 +108,22 @@ export function matchOutput(stdout, stderr, expectations) {
 
     actualIndex++;
     expectIndex++;
+
+    if (result.captures) {
+      for (const [name, value] of Object.entries(result.captures)) {
+        if (!VALID_CAPTURE_NAME.test(name)) {
+          return {
+            success: false,
+            error: `Invalid capture name "${name}". Capture names must match [A-Za-z_][A-Za-z0-9_]*`
+          };
+        }
+        if (!captureMap.has(name)) {
+          captureOrder.push(name);
+        }
+        const normalizedValue = value === undefined || value === null ? '' : String(value);
+        captureMap.set(name, normalizedValue);
+      }
+    }
   }
 
   // Check if there's unexpected extra output (only on the streams we were checking)
@@ -129,7 +152,10 @@ export function matchOutput(stdout, stderr, expectations) {
     };
   }
 
-  return { success: true, linesConsumed: actualIndex };
+  const captures = captureOrder.map(name => [name, captureMap.get(name)]);
+  return captures.length > 0
+    ? { success: true, linesConsumed: actualIndex, captures }
+    : { success: true, linesConsumed: actualIndex };
 }
 
 /**
@@ -142,60 +168,38 @@ function matchSingleLine(actualLine, expectation) {
   switch (expectation.type) {
     case 'inline': {
       // Handle inline patterns like: text [Matching: /\d+/] more text
-      const pattern = expectation.pattern;
+      const pattern = expectation.pattern ?? '';
 
-      // Build regex by replacing inline patterns with their regex equivalents
-      let regexPattern = pattern;
-      let regexFlags = '';
-
-      // Replace [Matching: /regex/flags] with captured group
-      // Also extract flags to apply to the entire pattern
-      regexPattern = regexPattern.replace(/\[Matching:\s*\/([^\/]+)\/([gimsuvy]*)\]/g, (match, regex, flags) => {
-        // Collect all flags from inline patterns
-        if (flags) {
-          for (const flag of flags) {
-            if (!regexFlags.includes(flag)) {
-              regexFlags += flag;
-            }
-          }
-        }
-        return `(${regex})`;
-      });
-
-      // Replace [Matching glob: pattern] with glob-converted regex
-      regexPattern = regexPattern.replace(/\[Matching glob:\s*([^\]]+)\]/g, (match, globPattern) => {
-        // Convert glob to regex pattern
-        let glob = globPattern.trim();
-        glob = glob.replace(/\*/g, '.*').replace(/\?/g, '.');
-        return `(${glob})`;
-      });
-
-      // Escape special regex characters in the literal parts
-      // First, mark the parts we want to keep as-is
-      const markers = [];
-      regexPattern = regexPattern.replace(/\([^)]+\)/g, (match) => {
-        markers.push(match);
-        return `__MARKER_${markers.length - 1}__`;
-      });
-
-      // Escape the literal parts
-      regexPattern = regexPattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-
-      // Restore the markers
-      markers.forEach((marker, i) => {
-        regexPattern = regexPattern.replace(`__MARKER_${i}__`, marker);
-      });
-
-      // Try to match
       try {
-        const regex = new RegExp(`^${regexPattern}$`, regexFlags);
-        if (regex.test(actualLine)) {
-          return { success: true };
+        const invalidCaptureName = findInvalidCaptureName(pattern);
+        if (invalidCaptureName) {
+          return {
+            success: false,
+            error: `Invalid capture name "${invalidCaptureName}". Capture names must match [A-Za-z_][A-Za-z0-9_]*`
+          };
         }
-        return {
-          success: false,
-          error: `Inline pattern did not match`
-        };
+
+        const { source, flags, hasNamedCaptures } = buildInlineRegex(pattern);
+
+        if (flags.includes('g') && hasNamedCaptures) {
+          return {
+            success: false,
+            error: 'Global regex flag /g is not supported when using named capture groups'
+          };
+        }
+
+        const regex = new RegExp(source, flags);
+        const match = regex.exec(actualLine);
+        if (!match) {
+          return {
+            success: false,
+            error: 'Inline pattern did not match'
+          };
+        }
+
+        return match.groups && Object.keys(match.groups).length > 0
+          ? { success: true, captures: match.groups }
+          : { success: true };
       } catch (err) {
         return {
           success: false,
@@ -229,9 +233,30 @@ function matchSingleLine(actualLine, expectation) {
 
     case 'regex': {
       try {
-        const regex = new RegExp(expectation.pattern, expectation.flags);
-        if (regex.test(actualLine)) {
-          return { success: true };
+        const flags = expectation.flags || '';
+        const hasNamedCaptures = NAMED_CAPTURE_PATTERN.test(expectation.pattern);
+
+        const invalidCaptureName = findInvalidCaptureName(expectation.pattern);
+        if (invalidCaptureName) {
+          return {
+            success: false,
+            error: `Invalid capture name "${invalidCaptureName}". Capture names must match [A-Za-z_][A-Za-z0-9_]*`
+          };
+        }
+
+        if (flags.includes('g') && hasNamedCaptures) {
+          return {
+            success: false,
+            error: 'Global regex flag /g is not supported when using named capture groups'
+          };
+        }
+
+        const regex = new RegExp(expectation.pattern, flags);
+        const match = regex.exec(actualLine);
+        if (match) {
+          return match.groups && Object.keys(match.groups).length > 0
+            ? { success: true, captures: match.groups }
+            : { success: true };
         }
 
         // Provide suggestion for regex issues
@@ -287,6 +312,239 @@ function matchSingleLine(actualLine, expectation) {
         error: `Unknown expectation type: ${expectation.type}`
       };
   }
+}
+
+/**
+ * Detect invalid capture group names before running the regex engine.
+ * @param {string} pattern
+ * @returns {string|null}
+ */
+function findInvalidCaptureName(pattern) {
+  NAMED_GROUP_ANY.lastIndex = 0;
+  let match;
+  while ((match = NAMED_GROUP_ANY.exec(pattern)) !== null) {
+    const name = match[1];
+    if (!VALID_CAPTURE_NAME.test(name)) {
+      return name;
+    }
+  }
+  return null;
+}
+
+/**
+ * Build a RegExp from an inline pattern, supporting nested [Matching] fragments and ellipsis tokens.
+ * @param {string} pattern
+ * @returns {{source: string, flags: string, hasNamedCaptures: boolean}}
+ */
+function buildInlineRegex(pattern) {
+  const tokens = [];
+  let buffer = '';
+  let index = 0;
+
+  const flushLiteral = () => {
+    if (buffer.length > 0) {
+      tokens.push({ type: 'literal', value: buffer });
+      buffer = '';
+    }
+  };
+
+  while (index < pattern.length) {
+    const remaining = pattern.slice(index);
+
+    if (remaining.startsWith('\\...')) {
+      buffer += '...';
+      index += 4;
+      continue;
+    }
+
+    if (remaining.startsWith('[Matching glob:')) {
+      const closing = findClosingBracket(pattern, index);
+      if (closing === -1) {
+        throw new Error('Unterminated [Matching glob: ...] inline expression');
+      }
+      const inside = pattern.slice(index + 15, closing);
+      flushLiteral();
+      tokens.push({ type: 'glob', pattern: inside.trim() });
+      index = closing + 1;
+      continue;
+    }
+
+    if (remaining.startsWith('[Matching:')) {
+      const closing = findClosingBracket(pattern, index);
+      if (closing === -1) {
+        throw new Error('Unterminated [Matching: ...] inline expression');
+      }
+      const inside = pattern.slice(index + 10, closing);
+      flushLiteral();
+      const { regex, flags } = parseInlineRegexBody(inside.trim());
+      tokens.push({ type: 'regex', pattern: regex, flags });
+      index = closing + 1;
+      continue;
+    }
+
+    if (remaining.startsWith('...')) {
+      flushLiteral();
+      tokens.push({ type: 'ellipsis' });
+      index += 3;
+      continue;
+    }
+
+    if (pattern[index] === '\\' && index + 1 < pattern.length) {
+      buffer += pattern[index] + pattern[index + 1];
+      index += 2;
+      continue;
+    }
+
+    buffer += pattern[index];
+    index++;
+  }
+
+  flushLiteral();
+
+  let regexSource = '';
+  const flagSet = new Set();
+  let hasNamedCaptures = false;
+
+  for (const token of tokens) {
+    switch (token.type) {
+      case 'literal':
+        regexSource += escapeRegex(token.value);
+        break;
+      case 'regex':
+        if (token.flags) {
+          for (const flag of token.flags) {
+            flagSet.add(flag);
+          }
+        }
+        if (NAMED_CAPTURE_PATTERN.test(token.pattern)) {
+          hasNamedCaptures = true;
+        }
+        regexSource += `(${token.pattern})`;
+        break;
+      case 'glob': {
+        const globSource = globToRegexPattern(token.pattern);
+        regexSource += `(${globSource})`;
+        break;
+      }
+      case 'ellipsis':
+        regexSource += '(?:[\\s\\S]*?)';
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (NAMED_CAPTURE_PATTERN.test(pattern)) {
+    hasNamedCaptures = true;
+  }
+
+  const flags = Array.from(flagSet).join('');
+  return {
+    source: `^${regexSource}$`,
+    flags,
+    hasNamedCaptures
+  };
+}
+
+/**
+ * Locate the closing bracket for an inline [Matching …] expression.
+ * @param {string} pattern
+ * @param {number} start
+ * @returns {number}
+ */
+function findClosingBracket(pattern, start) {
+  let escaped = false;
+  let inCharClass = false;
+  for (let i = start + 1; i < pattern.length; i++) {
+    const char = pattern[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '[') {
+      inCharClass = true;
+      continue;
+    }
+    if (char === ']' && inCharClass) {
+      inCharClass = false;
+      continue;
+    }
+    if (char === ']' && !inCharClass) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Parse the body of an inline [Matching: …] expression.
+ * @param {string} body
+ * @returns {{regex: string, flags: string}}
+ */
+function parseInlineRegexBody(body) {
+  if (!body.startsWith('/')) {
+    throw new Error('Inline [Matching: ...] expressions must use /pattern/flags syntax');
+  }
+
+  let escaped = false;
+  let pattern = '';
+  let terminatorIndex = -1;
+
+  for (let i = 1; i < body.length; i++) {
+    const char = body[i];
+    if (!escaped && char === '/') {
+      terminatorIndex = i;
+      break;
+    }
+    if (!escaped && char === '\\') {
+      escaped = true;
+      pattern += char;
+      continue;
+    }
+    escaped = false;
+    pattern += char;
+  }
+
+  if (terminatorIndex === -1) {
+    throw new Error('Inline [Matching: ...] expression is missing a closing "/"');
+  }
+
+  const flags = body.slice(terminatorIndex + 1);
+  if (!/^[gimsuvy]*$/.test(flags)) {
+    throw new Error(`Invalid regex flags "${flags}" in inline [Matching: ...] expression`);
+  }
+
+  return { regex: pattern, flags };
+}
+
+/**
+ * Escape literal content so it can be embedded in a regex.
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Convert a glob pattern into a regex source fragment without anchors.
+ * @param {string} pattern
+ * @returns {string}
+ */
+function globToRegexPattern(pattern) {
+  const regex = globToRegex(pattern);
+  let source = regex.source;
+  if (source.startsWith('^')) {
+    source = source.slice(1);
+  }
+  if (source.endsWith('$')) {
+    source = source.slice(0, -1);
+  }
+  return source;
 }
 
 /**

@@ -55,6 +55,24 @@ first
 last
 ```
 
+### Mid-line ellipsis (skip parts of a line)
+```console
+$ echo "Processed 12 of 20 files"
+Processed ... files
+```
+
+Need a literal `...`? Escape it: `Wait \... please`.
+
+### Capture values for later commands
+```console
+$ echo "Version: 1.2.3"
+[Matching: /Version:\s*(?<VERSION>\d+\.\d+\.\d+)/]
+$ echo "$VERSION"
+1.2.3
+```
+
+Captured group names must be valid shell identifiers (`A-Z`, numbers, `_` after the first character). Values are exported into the test shell after the command succeeds, so later commands in the same file can reuse them. The global `/g` flag cannot be combined with named captures yet.
+
 ## Stderr
 
 ```console
