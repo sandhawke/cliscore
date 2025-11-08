@@ -24,7 +24,7 @@ second
 ```
 ````
 
-New prompt = new test. No blank lines needed between tests.
+New prompt = new test. No blank lines between tests.
 
 ## Multiline Commands
 
@@ -105,7 +105,7 @@ no newline (no-eol)
 
 ## Setup/Teardown (cliscore.sh)
 
-Optional file in the directory where cliscore is run:
+Optional file in or recursively above the directory with each test file:
 
 ```sh
 before_each_file() {
@@ -117,11 +117,12 @@ after_each_file() {
 }
 
 helper_function() {
-    echo "usable in tests"
+    echo "usable as a command in test files"
 }
 ```
 
-Functions are sourced but their output is discarded.
+Output from these functions is sent to the console (or buffered for
+--json output), not matched as output in the tests.
 
 ## Running Tests
 
@@ -138,4 +139,4 @@ Exit code 0 = all passed, 1 = failures.
 
 ## That's It
 
-Write shell commands. Write expected output. Run `cliscore`.
+Write shell commands. Write expected output patterns. Run `cliscore`.
